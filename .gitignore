@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment and secrets
+.env
+combined_ca_bundle.pem
+
+# Generated / runtime data
+checkpoints.db
+profiles/
+
+# Backup convention (per SKILL.md)
+_backup/
+*.bak.*
+
+# HuggingFace local cache (auto-download fallback)
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.cursor/
+.qodo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Chainlit
+.chainlit/

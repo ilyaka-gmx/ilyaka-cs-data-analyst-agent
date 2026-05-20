@@ -1,0 +1,34 @@
+# Core agent framework
+langchain>=1.3.0
+langgraph>=1.2.0
+langgraph-checkpoint-sqlite==3.1.0
+langchain-openai>=0.3.0
+langchain-core>=0.3.0
+
+# Data
+pandas>=2.2.0
+
+# Schemas and validation
+pydantic>=2.0.0
+
+# MCP server
+fastmcp>=3.0.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# UI: Chainlit (primary)
+chainlit>=2.11.0
+
+# UI: Streamlit (fallback)
+streamlit>=1.40.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+
+# HTTP client (for connectivity tests)
+httpx>=0.27.0
+
+# Dataset auto-download (optional — only needed if CSV not in repo)
+datasets>=3.0.0
