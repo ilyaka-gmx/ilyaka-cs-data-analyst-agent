@@ -1,0 +1,10 @@
+{
+  "graphs": {
+    "agent": "src/agent.py:build_graph"
+  },
+  "source": {
+    "kind": "uv",
+    "root": "."
+  },
+  "env": ".env"
+}

@@ -178,6 +178,7 @@ def get_distribution(
     """Get the frequency distribution of categories or intents.
 
     Use this when the user asks about distribution, breakdown, or proportions.
+    NOT for simple "how many" counts — use count_rows for that.
     Returns counts sorted by frequency (descending), capped at top 15.
     """
     if group_by not in ("category", "intent"):
@@ -371,3 +372,21 @@ def recall_profile() -> str:
     'What do you remember?'
     """
     return get_facts(get_current_user_id())
+
+
+# --- Tool list helper ---
+
+
+def get_all_tools() -> list:
+    """Return all tools for the agent graph."""
+    return [
+        list_categories,
+        list_intents,
+        count_rows,
+        get_distribution,
+        get_examples,
+        search_instructions,
+        summarize_responses,
+        remember_fact,
+        recall_profile,
+    ]

@@ -29,6 +29,9 @@ _backup/
 .cursor/
 .qodo/
 
+# LangGraph
+.langgraph*/
+
 # OS
 .DS_Store
 Thumbs.db

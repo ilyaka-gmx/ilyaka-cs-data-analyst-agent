@@ -16,7 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from src.config import ROUTER_MODEL, get_llm
-from src.data import metadata
+from src.prompts import ROUTER_SYSTEM_PROMPT
 
 log = logging.getLogger(__name__)
 
@@ -30,24 +30,6 @@ class RouterOutput(BaseModel):
     reasoning: str = Field(
         description="Brief explanation of why this classification was chosen"
     )
-
-
-ROUTER_SYSTEM_PROMPT = f"""You are a query classifier for a customer service dataset analyst.
-
-{metadata.to_system_prompt_context()}
-
-Classify the user query into exactly one of:
-- "structured": questions with concrete, data-driven answers — counts, lists, distributions, examples, filtering, searching. Examples: "How many refund requests?", "Show me 3 examples from SHIPPING", "What categories exist?"
-- "unstructured": open-ended questions requiring summarization or qualitative analysis of the dataset. Examples: "Summarize the FEEDBACK category", "How do agents typically respond to complaints?"
-- "out_of_scope": questions unrelated to the customer service dataset. Examples: "Who is the president of France?", "Write me a poem", "What's the best CRM software?"
-
-Important rules:
-- If the question is about the customer service data in ANY way, it is NOT out_of_scope.
-- Questions asking to "show examples of people wanting X" are structured (they map to search/filter operations).
-- Questions about how agents respond or patterns in the data are unstructured.
-- Only classify as out_of_scope if the question has NO relation to the customer service dataset.
-
-Respond with JSON: {{"classification": "...", "reasoning": "..."}}"""
 
 
 def _parse_json_fallback(text: str) -> RouterOutput:
