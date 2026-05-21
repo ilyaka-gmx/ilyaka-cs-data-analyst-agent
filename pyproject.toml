@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests that make LLM API calls (deselect with '-m \"not slow\"')",
+]

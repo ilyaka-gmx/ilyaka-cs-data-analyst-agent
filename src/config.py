@@ -9,12 +9,15 @@ Dual-mode design:
   - Grader mode: no .pem file → standard system SSL (works out of the box)
 """
 
+import logging
 import os
 import ssl
 from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+
+log = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -99,6 +102,69 @@ def get_llm(model: str, **kwargs):
         **extra,
         **kwargs,
     )
+
+
+# --- Summarizer Strategy ---
+# "economy"  -> cheapest of AGENT_MODEL / ROUTER_MODEL (via live pricing)
+# "quality"  -> AGENT_MODEL
+# "router"   -> ROUTER_MODEL
+# <model-id> -> explicit model ID
+
+SUMMARIZER_STRATEGY: str = os.environ.get("SUMMARIZER_STRATEGY", "economy")
+
+_model_prices: dict[str, dict[str, float]] | None = None
+
+
+def get_model_prices() -> dict[str, dict[str, float]]:
+    """Fetch per-token pricing from Nebius /v1/models?verbose=true.
+
+    Lazy-loaded on first call, cached for the process lifetime.
+    Returns a dict keyed by model ID with "prompt" and "completion"
+    per-token prices as floats.
+    """
+    global _model_prices
+    if _model_prices is not None:
+        return _model_prices
+
+    models_url = NEBIUS_BASE_URL.rstrip("/").rsplit("/v1", 1)[0] + "/v1/models"
+    client = get_http_client() or httpx.Client()
+    try:
+        resp = client.get(
+            models_url,
+            params={"verbose": "true"},
+            headers={"Authorization": f"Bearer {NEBIUS_API_KEY}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _model_prices = {}
+        for m in data.get("data", []):
+            pricing = m.get("pricing", {})
+            _model_prices[m["id"]] = {
+                "prompt": float(pricing.get("prompt", 0)),
+                "completion": float(pricing.get("completion", 0)),
+            }
+        log.info("Fetched pricing for %d models from Nebius API", len(_model_prices))
+    except Exception:
+        log.warning("Failed to fetch model pricing; falling back to ROUTER_MODEL")
+        _model_prices = {}
+    return _model_prices
+
+
+def get_summarizer_model() -> str:
+    """Resolve SUMMARIZER_STRATEGY to a concrete model ID."""
+    if SUMMARIZER_STRATEGY == "quality":
+        return AGENT_MODEL
+    if SUMMARIZER_STRATEGY == "router":
+        return ROUTER_MODEL
+    if SUMMARIZER_STRATEGY == "economy":
+        prices = get_model_prices()
+        candidates = {AGENT_MODEL: prices.get(AGENT_MODEL), ROUTER_MODEL: prices.get(ROUTER_MODEL)}
+        priced = {m: p for m, p in candidates.items() if p is not None}
+        if priced:
+            return min(priced, key=lambda m: priced[m]["completion"])
+        return ROUTER_MODEL
+    return SUMMARIZER_STRATEGY
 
 
 # --- Ensure directories exist ---

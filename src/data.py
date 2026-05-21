@@ -3,9 +3,12 @@ Dataset loading and validation for the Bitext Customer Service dataset.
 
 Loads the CSV into a pandas DataFrame and validates the expected schema.
 Auto-downloads from HuggingFace if the CSV is not found locally.
+Derives constants (CATEGORIES, INTENTS, CATEGORY_INTENT_MAP) and builds
+DatasetMetadata for the agent's system prompt.
 """
 
 import os
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -79,3 +82,66 @@ def load_dataset() -> pd.DataFrame:
 
 
 dataset: pd.DataFrame = load_dataset()
+
+# --- Derived constants — single source of truth for the loaded dataset ---
+
+CATEGORIES: list[str] = sorted(dataset["category"].unique().tolist())
+INTENTS: list[str] = sorted(dataset["intent"].unique().tolist())
+CATEGORY_INTENT_MAP: dict[str, list[str]] = {
+    cat: sorted(dataset[dataset["category"] == cat]["intent"].unique().tolist())
+    for cat in CATEGORIES
+}
+
+
+@dataclass
+class DatasetMetadata:
+    """Validated metadata about the loaded dataset, used to generate
+    dynamic system prompt context so the agent always has accurate
+    dataset awareness even if the underlying data changes."""
+
+    row_count: int
+    num_categories: int
+    num_intents: int
+    categories: list[str]
+    intents: list[str]
+    category_intent_map: dict[str, list[str]]
+    warnings: list[str] = field(default_factory=list)
+
+    def validate(self) -> "DatasetMetadata":
+        if self.num_categories != EXPECTED_NUM_CATEGORIES:
+            self.warnings.append(
+                f"Expected {EXPECTED_NUM_CATEGORIES} categories, got {self.num_categories}"
+            )
+        if self.num_intents != EXPECTED_NUM_INTENTS:
+            self.warnings.append(
+                f"Expected {EXPECTED_NUM_INTENTS} intents, got {self.num_intents}"
+            )
+        return self
+
+    def to_system_prompt_context(self) -> str:
+        mapping_lines = []
+        for cat, intents in self.category_intent_map.items():
+            mapping_lines.append(f"  {cat}: {', '.join(intents)}")
+        return (
+            f"The dataset contains {self.row_count:,} customer service records "
+            f"across {self.num_categories} categories and {self.num_intents} intents.\n"
+            f"Categories and their intents:\n" + "\n".join(mapping_lines)
+        )
+
+
+def build_metadata(df: pd.DataFrame) -> DatasetMetadata:
+    return DatasetMetadata(
+        row_count=len(df),
+        num_categories=df["category"].nunique(),
+        num_intents=df["intent"].nunique(),
+        categories=CATEGORIES,
+        intents=INTENTS,
+        category_intent_map=CATEGORY_INTENT_MAP,
+    ).validate()
+
+
+metadata: DatasetMetadata = build_metadata(dataset)
+
+if metadata.warnings:
+    for w in metadata.warnings:
+        print(f"  WARNING: {w}")
