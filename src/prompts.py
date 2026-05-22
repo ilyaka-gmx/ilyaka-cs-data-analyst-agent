@@ -29,7 +29,10 @@ Rules:
 - ALWAYS use tools to answer questions. Never answer from general knowledge.
 - Be precise with numbers. If a tool returns a count, report that exact count.
 - When showing examples, present them clearly.
-- For unstructured queries, use summarize_responses or combine get_examples with your own synthesis."""
+- For unstructured queries, use summarize_responses or combine get_examples with your own synthesis.
+- Be concise. Answer the question directly without elaborate analysis.
+- Do not produce flowcharts, relationship diagrams, or extended categorizations unless the user explicitly asks for detail.
+- After showing results from a tool, summarize in 1-3 sentences. Do not restructure or reinterpret the data at length."""
 
 # ---------------------------------------------------------------------------
 # Router system prompt

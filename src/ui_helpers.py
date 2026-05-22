@@ -1,27 +1,69 @@
 """
-Shared UI helper functions used by both Chainlit and Streamlit UIs.
+Shared UI helper functions for the Streamlit web interface.
 
-Provides formatting for reasoning steps, token summaries, suggestion chips,
-session stats, and conversation export.
+Handles: suggestion chips, reasoning step extraction, token formatting,
+status bar data, conversation export, auto-tagging.
 """
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-SUGGESTION_CHIPS: list[dict[str, str]] = [
+# --- Suggestion Chips ---
+
+DEFAULT_SUGGESTIONS: list[dict[str, str]] = [
     {"label": "📂 What categories exist?", "query": "What categories exist in the dataset?"},
     {"label": "🔢 How many refund requests?", "query": "How many refund requests did we get?"},
-    {"label": "📊 Intent distribution in ACCOUNT", "query": "What is the distribution of intents in the ACCOUNT category?"},
+    {"label": "📊 ACCOUNT intent distribution", "query": "What is the distribution of intents in the ACCOUNT category?"},
     {"label": "📝 3 examples from SHIPPING", "query": "Show me 3 examples from the SHIPPING category."},
     {"label": "📋 Summarize FEEDBACK", "query": "Summarize the FEEDBACK category."},
     {"label": "🔍 People wanting money back", "query": "Show me examples of people wanting their money back."},
 ]
 
+CONTEXTUAL_SUGGESTIONS: dict[str, list[dict[str, str]]] = {
+    "REFUND": [
+        {"label": "📊 Refund intent distribution", "query": "What is the distribution of intents in the REFUND category?"},
+        {"label": "📝 Refund response examples", "query": "Show me 3 examples from the REFUND category."},
+    ],
+    "SHIPPING": [
+        {"label": "🔢 Shipping count", "query": "How many rows are in the SHIPPING category?"},
+        {"label": "📋 Summarize SHIPPING", "query": "Summarize the SHIPPING category."},
+    ],
+    "ORDER": [
+        {"label": "📊 Order intent distribution", "query": "What is the distribution of intents in the ORDER category?"},
+        {"label": "📝 Order examples", "query": "Show me 3 examples from the ORDER category."},
+    ],
+    "ACCOUNT": [
+        {"label": "🔢 Account count", "query": "How many rows are in the ACCOUNT category?"},
+        {"label": "📝 Account examples", "query": "Show me 3 examples from the ACCOUNT category."},
+    ],
+}
 
-def extract_reasoning_steps(messages: list, start_index: int = 0) -> list[dict]:
+
+def get_suggestions_after_response(
+    query_type: str, response_text: str
+) -> list[dict[str, str]]:
+    """Return contextual suggestion chips based on the last response."""
+    if query_type == "out_of_scope":
+        return DEFAULT_SUGGESTIONS[:3]
+
+    from src.data import CATEGORIES
+
+    for cat in CATEGORIES:
+        if cat in response_text.upper():
+            if cat in CONTEXTUAL_SUGGESTIONS:
+                return CONTEXTUAL_SUGGESTIONS[cat]
+
+    return DEFAULT_SUGGESTIONS[:3]
+
+
+# --- Reasoning Steps ---
+
+
+def extract_reasoning_steps(
+    messages: list, start_index: int = 0
+) -> list[dict]:
     """Extract tool calls and results from agent messages.
 
     Returns list of dicts with type "tool_call" or "tool_result".
-    Pairs are ordered: tool_call followed by its tool_result.
     """
     steps = []
     for msg in messages[start_index:]:
@@ -33,72 +75,79 @@ def extract_reasoning_steps(messages: list, start_index: int = 0) -> list[dict]:
                     "args": tc.get("args", {}),
                 })
         elif isinstance(msg, ToolMessage):
-            preview = msg.content[:300] + "..." if len(msg.content) > 300 else msg.content
+            preview = (
+                msg.content[:300] + "..."
+                if len(msg.content) > 300
+                else msg.content
+            )
             steps.append({
                 "type": "tool_result",
-                "name": msg.name if hasattr(msg, "name") else "tool",
+                "name": getattr(msg, "name", "tool"),
                 "content": preview,
             })
     return steps
 
 
 def get_final_response(messages: list) -> str:
-    """Get the final AI text response from a message list."""
+    """Get the final AI text response."""
     for msg in reversed(messages):
         if isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
             return msg.content
     return "No response generated."
 
 
-def format_token_summary(token_tracker) -> dict:
-    """Format token usage data for display.
-
-    Returns dict with: prompt_tokens, completion_tokens, total_tokens, estimated_cost.
-    """
-    prompt = token_tracker.total_prompt_tokens
-    completion = token_tracker.total_completion_tokens
-    total = prompt + completion
-    cost = (prompt * 0.20 + completion * 0.60) / 1_000_000
-    return {
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": total,
-        "estimated_cost": cost,
-    }
+# --- Token Formatting ---
 
 
-def format_token_line(token_tracker) -> str:
-    """One-line token summary for display below responses."""
-    s = format_token_summary(token_tracker)
-    return (
-        f"📊 {s['total_tokens']:,} tokens "
-        f"({s['prompt_tokens']:,} in + {s['completion_tokens']:,} out) "
-        f"· ~${s['estimated_cost']:.4f}"
-    )
+def format_per_query_tokens(query_tokens: dict) -> str:
+    """Format per-query token usage for response footer."""
+    p = query_tokens.get("prompt", 0)
+    c = query_tokens.get("completion", 0)
+    t = p + c
+    cost = (p * 0.20 + c * 0.60) / 1_000_000
+    return f"{t:,} tok · ~${cost:.4f}"
 
 
-class SessionStats:
-    """Track session-level statistics for the Analyst Dashboard."""
+def format_response_footer(
+    query_type: str,
+    query_tokens: dict,
+    duration_s: float,
+    tool_count: int,
+) -> str:
+    """One-line footer below each response."""
+    type_badge = {
+        "structured": "📊 struct",
+        "unstructured": "📝 open",
+        "out_of_scope": "🚫 oos",
+    }.get(query_type, "❓")
+    token_str = format_per_query_tokens(query_tokens)
+    return f"{type_badge} · {token_str} · ⏱ {duration_s:.1f}s · 🔧 {tool_count} calls"
 
-    def __init__(self):
-        self.query_count: int = 0
-        self.tool_call_count: int = 0
-        self.total_response_time: float = 0.0
 
-    def record_query(self, reasoning_steps: list[dict], response_time: float):
-        self.query_count += 1
-        self.tool_call_count += sum(
-            1 for s in reasoning_steps if s["type"] == "tool_call"
-        )
-        self.total_response_time += response_time
+# --- Auto-Tagging ---
 
-    @property
-    def avg_response_time(self) -> float:
-        return self.total_response_time / max(self.query_count, 1)
+
+def suggest_tags(messages: list) -> list[str]:
+    """Suggest tags based on categories mentioned in the conversation."""
+    from src.data import CATEGORIES
+
+    text = " ".join(
+        msg.content
+        for msg in messages
+        if isinstance(msg, (HumanMessage, AIMessage)) and msg.content
+    ).upper()
+    tags: set[str] = set()
+    for cat in CATEGORIES:
+        if cat in text:
+            tags.add(cat.lower())
+    return sorted(tags)[:5]
+
+
+# --- Export ---
 
 
 def export_conversation_markdown(messages: list) -> str:
-    """Export conversation history as a markdown string."""
+    """Export conversation as markdown (user + assistant messages only)."""
     lines = ["# Conversation Export\n"]
     for msg in messages:
         if isinstance(msg, HumanMessage):

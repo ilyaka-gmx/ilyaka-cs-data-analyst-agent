@@ -52,6 +52,9 @@ CHECKPOINTS_DB: Path = PROJECT_ROOT / "checkpoints.db"
 
 MAX_ITERATIONS: int = 12
 SEED: int = 42
+HEALTH_CHECK_INTERVAL_SECONDS: int = int(
+    os.environ.get("HEALTH_CHECK_INTERVAL", "300")
+)
 
 # --- Zscaler / Corporate Proxy Auto-Detection ---
 # If combined_ca_bundle.pem exists in the project root, we assume a corporate

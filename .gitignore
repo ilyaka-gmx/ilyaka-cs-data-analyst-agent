@@ -14,6 +14,7 @@ combined_ca_bundle.pem
 # Generated / runtime data
 checkpoints.db
 profiles/
+session_store.json
 
 # Backup convention (per SKILL.md)
 _backup/
@@ -36,5 +37,5 @@ _backup/
 .DS_Store
 Thumbs.db
 
-# Chainlit
+# Chainlit (removed from project, kept for cleanup)
 .chainlit/

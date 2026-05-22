@@ -17,10 +17,7 @@ fastmcp>=3.0.0
 # Environment
 python-dotenv>=1.0.0
 
-# UI: Chainlit (primary)
-chainlit>=2.11.0
-
-# UI: Streamlit (fallback)
+# UI: Streamlit
 streamlit>=1.40.0
 
 # Testing
