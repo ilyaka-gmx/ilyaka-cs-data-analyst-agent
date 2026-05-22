@@ -216,8 +216,8 @@ with st.sidebar:
     with st.expander(f"{health_dot} {health_status} · {health_age}"):
         report = health_data.get("report")
         if report:
-            for check in report.results:
-                icon = "✅" if check.passed else "❌"
+            for check in report.checks:
+                icon = {"pass": "✅", "warn": "⚠️", "fail": "❌"}[check.status]
                 st.caption(f"{icon} {check.name}: {check.message}")
         if st.button("🔄 Refresh Health", key="refresh_health"):
             st.session_state.last_health_time = 0

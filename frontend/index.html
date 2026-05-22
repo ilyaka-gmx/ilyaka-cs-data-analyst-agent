@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS Data Analyst</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root,[data-theme="light"]{
+  --bg:#f4f5f7;--surface:#fff;--raised:#f0f1f3;--border:#e2e4e9;
+  --text:#1a1c20;--text-dim:#5f6368;--text-faint:#9aa0a6;
+  --accent:#0d9488;--accent-lit:#0f766e;--accent-bg:rgba(13,148,136,.08);
+  --green:#16a34a;--yellow:#ca8a04;--red:#dc2626;
+  --user-msg-bg:#0d9488;--user-msg-text:#fff;
+  --bot-msg-bg:#fff;--bot-msg-border:#e2e4e9;
+  --step-bg:#f8f9fa;--scrollbar:#d1d5db;--shadow:0 1px 3px rgba(0,0,0,.06);
+  --step-route:#7c3aed;--step-tool:#0891b2;--step-result:#b45309;
+  --status-bg:#f0f1f3;--status-border:#e2e4e9;
+  --tag-active-bg:#0d9488;--tag-active-text:#fff;
+}
+[data-theme="dark"]{
+  --bg:#111318;--surface:#1a1d23;--raised:#22252d;--border:#2e3039;
+  --text:#d1d2d9;--text-dim:#8b8d96;--text-faint:#5c5e66;
+  --accent:#2dd4bf;--accent-lit:#5eead4;--accent-bg:rgba(45,212,191,.1);
+  --green:#34d399;--yellow:#fbbf24;--red:#f87171;
+  --user-msg-bg:#115e59;--user-msg-text:#ccfbf1;
+  --bot-msg-bg:#22252d;--bot-msg-border:#2e3039;
+  --step-bg:#181b22;--scrollbar:#2e3039;--shadow:none;
+  --step-route:#a78bfa;--step-tool:#22d3ee;--step-result:#facc15;
+  --status-bg:#1a1d23;--status-border:#2e3039;
+  --tag-active-bg:#2dd4bf;--tag-active-text:#111318;
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden;transition:background .2s,color .2s}
+
+/* ── SIDEBAR ── */
+.sidebar{width:280px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:background .2s,border-color .2s}
+.sb-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.sb-logo{width:28px;height:28px;background:var(--accent);border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+.sb-header .title{font-size:14px;font-weight:600;flex:1}
+.theme-btn{width:30px;height:30px;border:1px solid var(--border);border-radius:6px;background:var(--raised);color:var(--text-dim);cursor:pointer;display:grid;place-items:center;font-size:14px;transition:.15s;padding:0}
+.theme-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+.sb-user{padding:8px 16px;border-bottom:1px solid var(--border)}
+.sb-user label{display:block;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.sb-user input{width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:13px;transition:.2s}
+.sb-user input:focus{outline:none;border-color:var(--accent)}
+
+.sb-actions{padding:8px 16px;display:flex;gap:6px}
+.btn-new{flex:1;padding:7px 12px;background:var(--accent);border:none;border-radius:5px;color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;text-align:center}
+.btn-new:hover{background:var(--accent-lit)}
+
+.sb-search{padding:6px 16px}
+.sb-search input{width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:12px;transition:.2s}
+.sb-search input:focus{outline:none;border-color:var(--accent)}
+.sb-search input::placeholder{color:var(--text-faint)}
+
+/* Tag filter row */
+.sb-tag-filter{padding:4px 16px 2px;display:flex;flex-wrap:wrap;gap:4px;min-height:0}
+.tag-pill{display:inline-block;font-size:10px;padding:2px 7px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin:0;cursor:pointer;transition:.15s;border:1px solid transparent;user-select:none}
+.tag-pill:hover{border-color:var(--accent)}
+.tag-pill.active{background:var(--tag-active-bg);color:var(--tag-active-text);border-color:var(--tag-active-bg)}
+.sb-tag-filter-empty{font-size:10px;color:var(--text-faint);padding:0 16px 2px}
+
+.sb-chats{flex:1;overflow-y:auto;padding:4px 0}
+.sb-chats::-webkit-scrollbar{width:4px}
+.sb-chats::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:2px}
+.chat-item{padding:8px 16px;cursor:pointer;border-left:3px solid transparent;transition:.1s}
+.chat-item:hover{background:var(--accent-bg)}
+.chat-item.active{border-left-color:var(--accent);background:var(--accent-bg)}
+.chat-item .ci-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item .ci-meta{font-size:11px;color:var(--text-faint);margin-top:2px}
+.chat-item .ci-tags{margin-top:2px}
+.ci-tag{display:inline-block;font-size:9px;padding:1px 5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-right:2px}
+
+/* Sidebar sections */
+.sb-section{border-top:1px solid var(--border)}
+.sb-toggle{display:flex;align-items:center;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);user-select:none}
+.sb-toggle:hover{color:var(--accent)}
+.sb-toggle .arrow{margin-right:6px;font-size:10px;transition:transform .15s;display:inline-block}
+.sb-toggle .arrow.open{transform:rotate(90deg)}
+.sb-panel{display:none;padding:4px 16px 8px}
+.sb-panel.open{display:block}
+
+.tag-mgmt-row{display:flex;align-items:center;gap:4px;margin-bottom:4px;flex-wrap:wrap}
+.tag-rm{display:inline-flex;align-items:center;gap:2px;font-size:11px;padding:2px 6px;background:var(--accent-bg);color:var(--accent);border-radius:3px;cursor:default}
+.tag-rm .x{cursor:pointer;font-weight:700;margin-left:2px}
+.tag-rm .x:hover{color:var(--red)}
+.tag-add{display:flex;gap:4px;margin-top:4px}
+.tag-add input{flex:1;padding:3px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font:inherit;font-size:11px}
+.tag-add input:focus{outline:none;border-color:var(--accent)}
+.tag-add button{padding:3px 8px;background:var(--accent);border:none;border-radius:3px;color:#fff;font-size:11px;cursor:pointer}
+.sb-settings-content{font-size:12px}
+.export-btn{display:block;width:100%;padding:6px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font:inherit;font-size:12px;cursor:pointer;text-align:left;margin-top:4px;transition:.15s}
+.export-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* Tabs */
+.tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);transition:.2s}
+.tab-btn{padding:10px 20px;font:inherit;font-size:13px;font-weight:500;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:.15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none;flex:1;overflow-y:auto}
+.tab-content.active{display:flex;flex-direction:column}
+
+/* Chat messages */
+.messages{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:10px}
+.messages::-webkit-scrollbar{width:4px}
+.messages::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:2px}
+
+.msg{max-width:640px;padding:10px 14px;border-radius:8px;line-height:1.6;font-size:14px;white-space:pre-wrap;word-break:break-word;box-shadow:var(--shadow);transition:.2s}
+.msg.user{align-self:flex-end;background:var(--user-msg-bg);color:var(--user-msg-text);border-bottom-right-radius:2px}
+.msg.bot{align-self:flex-start;background:var(--bot-msg-bg);border:1px solid var(--bot-msg-border);border-bottom-left-radius:2px}
+
+.reasoning-toggle{cursor:pointer;color:var(--accent);font-size:12px;margin-top:6px;user-select:none;font-weight:500}
+.reasoning-toggle:hover{text-decoration:underline}
+.reasoning-content{display:none;margin-top:4px}
+.reasoning-content.open{display:block}
+.step{margin:2px 0;padding:3px 8px;background:var(--step-bg);border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:11px;border-left:2px solid transparent;transition:.2s}
+.step.route{color:var(--step-route);border-color:var(--step-route)}
+.step.tool{color:var(--step-tool);border-color:var(--step-tool)}
+.step.result{color:var(--step-result);border-color:var(--step-result)}
+.msg-footer{font-size:11px;color:var(--text-faint);margin-top:6px}
+
+/* Suggestion chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.chip{padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer;color:var(--text-dim);transition:.15s;box-shadow:var(--shadow)}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+/* Welcome */
+.welcome{text-align:center;padding:48px 20px 24px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.welcome h2{font-size:20px;font-weight:600}
+.welcome p{font-size:14px;color:var(--text-dim);max-width:400px;line-height:1.5}
+.welcome .chips{margin-top:12px;max-width:500px}
+
+/* Typing animation */
+.typing-indicator{align-self:flex-start;padding:10px 14px;background:var(--bot-msg-bg);border:1px solid var(--bot-msg-border);border-radius:8px;display:none;align-items:center;gap:4px;box-shadow:var(--shadow)}
+.typing-indicator.visible{display:flex}
+.typing-indicator .dot{width:5px;height:5px;background:var(--text-faint);border-radius:50%;animation:blink 1.2s infinite}
+.typing-indicator .dot:nth-child(2){animation-delay:.2s}
+.typing-indicator .dot:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.typing-indicator .typing-label{font-size:12px;color:var(--text-faint);margin-left:4px}
+
+/* Compose bar */
+.compose{padding:12px 24px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface);transition:.2s}
+.compose input{flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font:inherit;font-size:14px;transition:.2s}
+.compose input:focus{outline:none;border-color:var(--accent)}
+.compose input::placeholder{color:var(--text-faint)}
+.compose button{padding:9px 20px;background:var(--accent);border:none;border-radius:6px;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+.compose button:hover{background:var(--accent-lit)}
+.compose button:disabled{background:var(--raised);color:var(--text-faint);cursor:not-allowed}
+
+/* Status bar */
+.status-bar{display:flex;align-items:center;gap:12px;padding:4px 20px;border-top:1px solid var(--status-border);background:var(--status-bg);font-size:11px;color:var(--text-faint);transition:.2s;flex-shrink:0}
+.status-bar .sep{color:var(--border)}
+.health-seg{cursor:pointer;position:relative}
+.health-seg:hover{color:var(--accent)}
+.health-popover{display:none;position:absolute;bottom:24px;left:0;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;min-width:280px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:10;font-size:12px;color:var(--text)}
+.health-popover.open{display:block}
+.health-popover .hc{margin:3px 0}
+.health-popover .hc-msg{color:var(--text-dim);font-size:11px;margin-left:18px}
+.refresh-btn{margin-top:8px;padding:4px 10px;background:var(--accent);border:none;border-radius:4px;color:#fff;font-size:11px;cursor:pointer;transition:.15s}
+.refresh-btn:hover{background:var(--accent-lit)}
+
+/* Admin tab */
+.admin{padding:20px 24px}
+.admin h3{font-size:16px;font-weight:600;margin-bottom:12px}
+.admin-empty{color:var(--text-dim);font-size:14px}
+.admin-card{border:1px solid var(--border);border-radius:6px;margin-bottom:10px;transition:.2s}
+.admin-card-header{padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500}
+.admin-card-header:hover{background:var(--accent-bg)}
+.admin-card-header .arrow{font-size:10px;transition:transform .15s;display:inline-block}
+.admin-card-header .arrow.open{transform:rotate(90deg)}
+.admin-card-body{display:none;padding:0 14px 10px;font-size:12px}
+.admin-card-body.open{display:block}
+.admin-card-body .q-row{padding:6px 0;border-bottom:1px solid var(--border)}
+.admin-card-body .q-row:last-child{border-bottom:none}
+.admin-card-body .q-header{font-weight:500}
+.admin-card-body .q-tool{font-family:monospace;font-size:11px;color:var(--step-tool);margin:2px 0 2px 12px}
+.admin-card-body .q-response{color:var(--text-dim);margin-top:2px}
+
+@media(max-width:768px){.sidebar{display:none}.msg{max-width:92%}}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<div class="sidebar">
+  <div class="sb-header">
+    <div class="sb-logo">CS</div>
+    <span class="title">Data Analyst</span>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme">&#9789;</button>
+  </div>
+
+  <div class="sb-user">
+    <label>User</label>
+    <input id="userId" list="userList" placeholder="default" autocomplete="off">
+    <datalist id="userList"></datalist>
+  </div>
+
+  <div class="sb-actions">
+    <button class="btn-new" id="btnNew">+ New Chat</button>
+  </div>
+
+  <div class="sb-search">
+    <input id="searchInput" placeholder="Search chats...">
+  </div>
+
+  <div id="tagFilterArea"></div>
+
+  <div class="sb-chats" id="chatList"></div>
+
+  <div class="sb-section">
+    <div class="sb-toggle" id="tagToggle">
+      <span class="arrow" id="tagsArrow">&#9654;</span> Chat Tags
+    </div>
+    <div class="sb-panel" id="tagsPanel"></div>
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-toggle" id="settingsToggle">
+      <span class="arrow" id="settingsArrow">&#9654;</span> Settings
+    </div>
+    <div class="sb-panel" id="settingsPanel">
+      <div class="sb-settings-content">
+        <button class="export-btn" id="exportBtn">Export Conversation</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="chat">Chat</button>
+    <button class="tab-btn" data-tab="admin">Admin</button>
+  </div>
+
+  <!-- CHAT TAB -->
+  <div class="tab-content active" id="chatTab">
+    <div class="messages" id="messages"></div>
+    <div class="compose">
+      <input id="queryInput" placeholder="Ask about the customer service dataset...">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <!-- ADMIN TAB -->
+  <div class="tab-content" id="adminTab">
+    <div class="admin" id="adminContent"></div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span class="health-seg" id="healthSeg">&#9898; loading...</span>
+    <span class="sep">|</span>
+    <span id="datasetSeg">loading...</span>
+    <span class="sep">|</span>
+    <span id="tokenSeg">0 tok</span>
+    <span class="sep">|</span>
+    <span id="modelSeg">loading...</span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ── Config ── */
+var API = '';
+var SUGGESTIONS = [
+  {label:'What categories exist?', query:'What categories exist in the dataset?'},
+  {label:'How many refund requests?', query:'How many refund requests did we get?'},
+  {label:'Summarize FEEDBACK', query:'Summarize the FEEDBACK category.'},
+  {label:'3 examples from SHIPPING', query:'Show me 3 examples from the SHIPPING category.'},
+  {label:'Intent dist. in ACCOUNT', query:'What is the distribution of intents in the ACCOUNT category?'},
+  {label:'Top customer issues', query:'What are the top customer issues in the dataset?'}
+];
+
+/* ── State ── */
+var activeThread = null;
+var chatMessages = [];
+var allChats = [];
+var allTags = [];
+var activeTagFilter = null;
+var isSending = false;
+
+/* ── DOM refs ── */
+var $messages   = document.getElementById('messages');
+var $queryInput = document.getElementById('queryInput');
+var $sendBtn    = document.getElementById('sendBtn');
+var $chatList   = document.getElementById('chatList');
+var $search     = document.getElementById('searchInput');
+var $userId     = document.getElementById('userId');
+var $userList   = document.getElementById('userList');
+var $themeBtn   = document.getElementById('themeBtn');
+var $healthSeg  = document.getElementById('healthSeg');
+var $datasetSeg = document.getElementById('datasetSeg');
+var $tokenSeg   = document.getElementById('tokenSeg');
+var $modelSeg   = document.getElementById('modelSeg');
+var $tagsPanel  = document.getElementById('tagsPanel');
+var $tagFilter  = document.getElementById('tagFilterArea');
+var $adminContent = document.getElementById('adminContent');
+
+/* ── Util ── */
+function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function makeId(){return Math.random().toString(36).substring(2,10)}
+function scrollBottom(){$messages.scrollTop=$messages.scrollHeight}
+function getUser(){return $userId.value.trim()||'default'}
+
+/* ── Theme ── */
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  $themeBtn.innerHTML = t==='dark' ? '&#9788;' : '&#9789;';
+  try{localStorage.setItem('theme',t)}catch(e){}
+}
+$themeBtn.addEventListener('click',function(){
+  setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+});
+try{var saved=localStorage.getItem('theme');if(saved)setTheme(saved)}catch(e){}
+
+/* ── User ── */
+try{var savedUser=localStorage.getItem('userId');if(savedUser)$userId.value=savedUser}catch(e){}
+$userId.addEventListener('change',function(){
+  try{localStorage.setItem('userId',this.value)}catch(e){}
+  activeTagFilter=null;
+  startNewChat();
+  loadChatList();
+  loadUsers();
+});
+
+/* ── Tab switching ── */
+document.querySelectorAll('.tab-btn').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+    document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active')});
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab+'Tab').classList.add('active');
+    if(btn.dataset.tab==='admin') loadAdmin();
+  });
+});
+
+/* ── Sidebar panels ── */
+document.getElementById('tagToggle').addEventListener('click',function(){
+  var arrow=document.getElementById('tagsArrow');
+  arrow.classList.toggle('open');
+  $tagsPanel.classList.toggle('open');
+  if($tagsPanel.classList.contains('open')) renderTagPanel();
+});
+document.getElementById('settingsToggle').addEventListener('click',function(){
+  var arrow=document.getElementById('settingsArrow');
+  var panel=document.getElementById('settingsPanel');
+  arrow.classList.toggle('open');
+  panel.classList.toggle('open');
+});
+
+/* ── Export ── */
+document.getElementById('exportBtn').addEventListener('click',function(){
+  if(!chatMessages.length){alert('No messages to export.');return}
+  var lines=['# Conversation Export\n'];
+  chatMessages.forEach(function(m){
+    lines.push((m.role==='user'?'**User**: ':'**Agent**: ')+m.content+'\n');
+  });
+  var blob=new Blob([lines.join('\n')],{type:'text/markdown'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='conversation.md';a.click();
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   WELCOME SCREEN
+   ══════════════════════════════════════════════════════════════════ */
+
+function showWelcome(){
+  $messages.innerHTML='';
+  var w=document.createElement('div');
+  w.className='welcome';
+  w.id='welcomeScreen';
+  w.innerHTML='<h2>What would you like to know?</h2>'
+    +'<p>Ask about categories, intents, distributions, examples, or anything in the customer service dataset.</p>';
+  var chips=document.createElement('div');
+  chips.className='chips';
+  SUGGESTIONS.forEach(function(s){
+    var c=document.createElement('div');
+    c.className='chip';
+    c.textContent=s.label;
+    c.addEventListener('click',function(){$queryInput.value=s.query;sendQuery()});
+    chips.appendChild(c);
+  });
+  w.appendChild(chips);
+  $messages.appendChild(w);
+}
+
+function showSuggestionChips(){
+  var old=document.getElementById('suggestionsRow');
+  if(old)old.remove();
+  var row=document.createElement('div');
+  row.id='suggestionsRow';
+  row.className='chips';
+  row.style.padding='4px 0 8px';
+  var picks=SUGGESTIONS.slice(0,3);
+  picks.forEach(function(s){
+    var c=document.createElement('div');
+    c.className='chip';
+    c.textContent=s.label;
+    c.addEventListener('click',function(){$queryInput.value=s.query;sendQuery()});
+    row.appendChild(c);
+  });
+  $messages.appendChild(row);
+  scrollBottom();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   NEW CHAT
+   ══════════════════════════════════════════════════════════════════ */
+
+function startNewChat(){
+  activeThread=makeId();
+  chatMessages=[];
+  showWelcome();
+  renderChatList();
+  renderTagPanel();
+  $queryInput.value='';
+  $sendBtn.disabled=false;
+  $queryInput.focus();
+}
+document.getElementById('btnNew').addEventListener('click',startNewChat);
+
+/* ══════════════════════════════════════════════════════════════════
+   CHAT LIST
+   ══════════════════════════════════════════════════════════════════ */
+
+async function loadChatList(){
+  try{
+    var url=API+'/api/chats?user_id='+encodeURIComponent(getUser());
+    if(activeTagFilter) url+='&tag='+encodeURIComponent(activeTagFilter);
+    var r=await fetch(url);
+    allChats=await r.json();
+  }catch(e){allChats=[];}
+  renderChatList();
+  await loadAllTags();
+}
+
+function renderChatList(){
+  var search=($search.value||'').toLowerCase();
+  var filtered=allChats.filter(function(c){return !search||c.title.toLowerCase().indexOf(search)>=0});
+  if(!filtered.length){
+    $chatList.innerHTML='<div style="padding:12px 16px;font-size:12px;color:var(--text-faint)">'
+      +(allChats.length?'No matches':'No conversations yet')+'</div>';
+    return;
+  }
+  $chatList.innerHTML='';
+  filtered.forEach(function(c){
+    var item=document.createElement('div');
+    item.className='chat-item'+(c.thread_id===activeThread?' active':'');
+    var title=document.createElement('div');
+    title.className='ci-title';
+    title.textContent=(c.thread_id===activeThread?'\u25B6 ':'')+c.title;
+    item.appendChild(title);
+    if(c.tags&&c.tags.length){
+      var tagsEl=document.createElement('div');
+      tagsEl.className='ci-tags';
+      c.tags.forEach(function(t){
+        var pill=document.createElement('span');
+        pill.className='ci-tag';
+        pill.textContent=t;
+        tagsEl.appendChild(pill);
+      });
+      item.appendChild(tagsEl);
+    }
+    var meta=document.createElement('div');
+    meta.className='ci-meta';
+    meta.textContent=(c.updated_at||'').substring(0,16)+' \u00b7 '+c.message_count+' msg';
+    item.appendChild(meta);
+    item.addEventListener('click',function(){switchToChat(c.thread_id)});
+    $chatList.appendChild(item);
+  });
+}
+
+$search.addEventListener('input',renderChatList);
+
+/* ══════════════════════════════════════════════════════════════════
+   TAG FILTER (above chat list)
+   ══════════════════════════════════════════════════════════════════ */
+
+async function loadAllTags(){
+  try{
+    var r=await fetch(API+'/api/tags');
+    var d=await r.json();
+    allTags=d.tags||[];
+  }catch(e){allTags=[];}
+  renderTagFilter();
+}
+
+function renderTagFilter(){
+  if(!allTags.length){
+    $tagFilter.innerHTML='';
+    return;
+  }
+  var wrap=document.createElement('div');
+  wrap.className='sb-tag-filter';
+  allTags.forEach(function(tag){
+    var pill=document.createElement('span');
+    pill.className='tag-pill'+(activeTagFilter===tag?' active':'');
+    pill.textContent=tag;
+    pill.addEventListener('click',function(){
+      if(activeTagFilter===tag){activeTagFilter=null}
+      else{activeTagFilter=tag}
+      loadChatList();
+    });
+    wrap.appendChild(pill);
+  });
+  $tagFilter.innerHTML='';
+  $tagFilter.appendChild(wrap);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SWITCH TO EXISTING CHAT
+   ══════════════════════════════════════════════════════════════════ */
+
+async function switchToChat(threadId){
+  activeThread=threadId;
+  chatMessages=[];
+  renderChatList();
+  try{
+    var r=await fetch(API+'/api/chats/'+threadId);
+    var data=await r.json();
+    chatMessages=data.messages||[];
+    renderLoadedMessages(data.queries||[]);
+  }catch(e){
+    $messages.innerHTML='<div style="padding:20px;color:var(--red)">Failed to load chat.</div>';
+  }
+  renderTagPanel();
+}
+
+function renderLoadedMessages(queries){
+  $messages.innerHTML='';
+  chatMessages.forEach(function(m){
+    if(m.role==='user'){
+      appendUserBubble(m.content);
+    } else {
+      var q=queries.find(function(qq){
+        return qq.final_response_preview && m.content && m.content.indexOf(qq.final_response_preview.substring(0,40))===0;
+      });
+      appendBotBubble(m.content, q?q.tool_calls:[], q);
+    }
+  });
+  showSuggestionChips();
+  scrollBottom();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SEND QUERY (SSE)
+   ══════════════════════════════════════════════════════════════════ */
+
+$queryInput.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey)sendQuery()});
+$sendBtn.addEventListener('click',sendQuery);
+
+async function sendQuery(){
+  if(isSending)return;
+  var q=$queryInput.value.trim();
+  if(!q)return;
+
+  isSending=true;
+  $queryInput.value='';
+  $sendBtn.disabled=true;
+
+  var welcome=document.getElementById('welcomeScreen');
+  if(welcome)welcome.remove();
+  var oldSug=document.getElementById('suggestionsRow');
+  if(oldSug)oldSug.remove();
+
+  appendUserBubble(q);
+  chatMessages.push({role:'user',content:q});
+
+  var typingEl=showTyping();
+  scrollBottom();
+
+  var steps=[];
+  var finalText='';
+  var answerData=null;
+  var liveStepsEl=null;
+
+  try{
+    var resp=await fetch(API+'/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:q,session_id:activeThread,user_id:getUser()})
+    });
+
+    var reader=resp.body.getReader();
+    var decoder=new TextDecoder();
+    var buffer='';
+    var eventType=null;
+
+    while(true){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buffer+=decoder.decode(chunk.value,{stream:true});
+      var lines=buffer.split('\n');
+      buffer=lines.pop();
+      for(var i=0;i<lines.length;i++){
+        var line=lines[i];
+        if(line.startsWith('event: ')){eventType=line.substring(7).trim();continue}
+        if(line.startsWith('data: ')&&eventType){
+          try{
+            var d=JSON.parse(line.substring(6));
+            if(eventType==='route'){steps.push({type:'route',query_type:d.query_type})}
+            else if(eventType==='tool_call'){steps.push({type:'tool_call',name:d.name,args:d.args})}
+            else if(eventType==='tool_result'){steps.push({type:'tool_result',name:d.name,content:d.content})}
+            else if(eventType==='answer'){answerData=d;finalText=d.text}
+            else if(eventType==='error'){finalText='Error: '+d.message}
+            if(eventType!=='answer'){
+              liveStepsEl=updateLiveSteps(liveStepsEl,steps);
+              scrollBottom();
+            }
+          }catch(e){}
+          eventType=null;
+        }
+      }
+    }
+  }catch(e){
+    finalText='Connection error. Please try again.';
+  }
+
+  if(typingEl)typingEl.remove();
+  if(liveStepsEl)liveStepsEl.remove();
+
+  appendBotBubble(finalText,steps,answerData);
+  chatMessages.push({role:'assistant',content:finalText});
+
+  scrollBottom();
+  isSending=false;
+  $sendBtn.disabled=false;
+  $queryInput.focus();
+
+  showSuggestionChips();
+  await loadChatList();
+  renderTagPanel();
+  refreshMeta();
+}
+
+/* ── Message rendering helpers ── */
+
+function appendUserBubble(text){
+  var el=document.createElement('div');
+  el.className='msg user';
+  el.textContent=text;
+  $messages.appendChild(el);
+  scrollBottom();
+}
+
+function appendBotBubble(text,steps,answerData){
+  var el=document.createElement('div');
+  el.className='msg bot';
+
+  var content=document.createElement('span');
+  content.textContent=text||'No response.';
+  el.appendChild(content);
+
+  if(steps&&steps.length){
+    var togId='r'+makeId();
+    var toggle=document.createElement('div');
+    toggle.className='reasoning-toggle';
+    toggle.textContent='Show reasoning ('+steps.length+' steps)';
+
+    var reasoningBox=document.createElement('div');
+    reasoningBox.className='reasoning-content';
+    reasoningBox.id=togId;
+
+    steps.forEach(function(s){
+      var stepEl=document.createElement('div');
+      stepEl.className='step';
+      if(s.type==='route'){stepEl.classList.add('route');stepEl.textContent='Route: '+(s.query_type||'')}
+      else if(s.type==='tool_call'){stepEl.classList.add('tool');stepEl.textContent=s.name+'('+JSON.stringify(s.args||{})+')'}
+      else if(s.type==='tool_result'){stepEl.classList.add('result');stepEl.textContent=(s.content||'').substring(0,200)}
+      reasoningBox.appendChild(stepEl);
+    });
+
+    toggle.addEventListener('click',function(){
+      reasoningBox.classList.toggle('open');
+      toggle.textContent=(reasoningBox.classList.contains('open')?'Hide':'Show')+' reasoning ('+steps.length+' steps)';
+    });
+    el.appendChild(toggle);
+    el.appendChild(reasoningBox);
+  }
+
+  if(answerData){
+    var footer=document.createElement('div');
+    footer.className='msg-footer';
+    var badge={structured:'struct',unstructured:'open',out_of_scope:'oos'}[answerData.query_type]||'';
+    var tok=(answerData.tokens||{}).total||0;
+    var dur=answerData.duration_ms||0;
+    var tc=answerData.tool_count||0;
+    footer.textContent=badge+' \u00b7 '+tok.toLocaleString()+' tok \u00b7 '+(dur/1000).toFixed(1)+'s \u00b7 '+tc+' calls';
+    el.appendChild(footer);
+  }
+
+  $messages.appendChild(el);
+}
+
+function showTyping(){
+  var el=document.createElement('div');
+  el.className='typing-indicator visible';
+  el.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div><span class="typing-label">Thinking...</span>';
+  $messages.appendChild(el);
+  return el;
+}
+
+function updateLiveSteps(existing,steps){
+  if(!existing){
+    existing=document.createElement('div');
+    existing.className='msg bot';
+    existing.style.opacity='0.7';
+    $messages.appendChild(existing);
+  }
+  existing.innerHTML='';
+  steps.forEach(function(s){
+    var stepEl=document.createElement('div');
+    stepEl.className='step';
+    if(s.type==='route'){stepEl.classList.add('route');stepEl.textContent='Route: '+(s.query_type||'')}
+    else if(s.type==='tool_call'){stepEl.classList.add('tool');stepEl.textContent=s.name+'('+JSON.stringify(s.args||{})+')'}
+    else if(s.type==='tool_result'){stepEl.classList.add('result');stepEl.textContent=(s.content||'').substring(0,200)}
+    existing.appendChild(stepEl);
+  });
+  return existing;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TAG PANEL (per-chat tag management)
+   ══════════════════════════════════════════════════════════════════ */
+
+function renderTagPanel(){
+  if(!activeThread){
+    $tagsPanel.innerHTML='<div style="font-size:12px;color:var(--text-faint)">Start a chat to manage tags</div>';
+    return;
+  }
+  var chat=allChats.find(function(c){return c.thread_id===activeThread});
+  var tags=chat?chat.tags:[];
+
+  $tagsPanel.innerHTML='';
+
+  if(tags.length){
+    var row=document.createElement('div');
+    row.className='tag-mgmt-row';
+    tags.forEach(function(t){
+      var pill=document.createElement('span');
+      pill.className='tag-rm';
+      pill.innerHTML=esc(t)+'<span class="x">\u00d7</span>';
+      pill.querySelector('.x').addEventListener('click',function(){removeTagFromChat(t)});
+      row.appendChild(pill);
+    });
+    $tagsPanel.appendChild(row);
+  } else {
+    var empty=document.createElement('div');
+    empty.style.cssText='font-size:11px;color:var(--text-faint);margin-bottom:4px';
+    empty.textContent='No tags on this chat';
+    $tagsPanel.appendChild(empty);
+  }
+
+  var addRow=document.createElement('div');
+  addRow.className='tag-add';
+  var inp=document.createElement('input');
+  inp.placeholder='Add tag...';
+  inp.addEventListener('keydown',function(e){if(e.key==='Enter')doAddTag()});
+  var btn=document.createElement('button');
+  btn.textContent='+';
+  btn.addEventListener('click',doAddTag);
+  addRow.appendChild(inp);
+  addRow.appendChild(btn);
+  $tagsPanel.appendChild(addRow);
+
+  function doAddTag(){
+    var tag=inp.value.trim().toLowerCase();
+    if(!tag)return;
+    addTagToChat(tag);
+    inp.value='';
+  }
+}
+
+async function addTagToChat(tag){
+  if(!activeThread)return;
+  await fetch(API+'/api/chats/'+activeThread+'/tags',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tag:tag})
+  });
+  await loadChatList();
+  renderTagPanel();
+}
+
+async function removeTagFromChat(tag){
+  if(!activeThread)return;
+  await fetch(API+'/api/chats/'+activeThread+'/tags/'+encodeURIComponent(tag),{method:'DELETE'});
+  await loadChatList();
+  renderTagPanel();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ADMIN TAB
+   ══════════════════════════════════════════════════════════════════ */
+
+async function loadAdmin(){
+  $adminContent.innerHTML='<h3>Session Traces</h3>';
+  try{
+    var r=await fetch(API+'/api/chats?user_id='+encodeURIComponent(getUser()));
+    var chats=await r.json();
+    if(!chats.length){
+      $adminContent.innerHTML+='<div class="admin-empty">No sessions recorded yet. Start a conversation in the Chat tab.</div>';
+      return;
+    }
+    for(var i=0;i<chats.length;i++){
+      var chat=chats[i];
+      var cr=await fetch(API+'/api/chats/'+chat.thread_id);
+      var detail=await cr.json();
+      var queries=detail.queries||[];
+      var hasFallback=queries.some(function(q){return q.hit_fallback});
+      var cardId='ac_'+chat.thread_id.replace(/[^a-z0-9]/gi,'');
+
+      var card=document.createElement('div');
+      card.className='admin-card';
+
+      var header=document.createElement('div');
+      header.className='admin-card-header';
+      header.innerHTML='<span class="arrow" id="'+cardId+'_a">&#9654;</span>'
+        +(hasFallback?'&#9888;':'&#9989;')+' '+esc(chat.title)
+        +' &mdash; '+(chat.updated_at||'').substring(0,16)
+        +' &middot; '+chat.query_count+' queries &middot; '+(chat.total_tokens||0).toLocaleString()+' tok';
+
+      var body=document.createElement('div');
+      body.className='admin-card-body';
+      body.id=cardId+'_b';
+
+      var info=document.createElement('div');
+      info.style.cssText='color:var(--text-faint);margin-bottom:6px';
+      info.innerHTML='Session: <code>'+esc(chat.thread_id)+'</code> &middot; User: '+esc(chat.user_id||'default');
+      body.appendChild(info);
+
+      if(chat.tags&&chat.tags.length){
+        var tagRow=document.createElement('div');
+        tagRow.className='tag-mgmt-row';
+        tagRow.style.marginBottom='6px';
+        chat.tags.forEach(function(t){
+          var pill=document.createElement('span');
+          pill.className='tag-rm';
+          pill.innerHTML=esc(t)+'<span class="x">\u00d7</span>';
+          (function(tid,tag){
+            pill.querySelector('.x').addEventListener('click',function(){
+              removeTagAdmin(tid,tag);
+            });
+          })(chat.thread_id,t);
+          tagRow.appendChild(pill);
+        });
+        body.appendChild(tagRow);
+      }
+
+      var addDiv=document.createElement('div');
+      addDiv.className='tag-add';
+      addDiv.style.marginBottom='8px';
+      var tagInp=document.createElement('input');
+      tagInp.placeholder='Add tag...';
+      var tagBtn=document.createElement('button');
+      tagBtn.textContent='+';
+      (function(tid,inpRef){
+        tagInp.addEventListener('keydown',function(e){if(e.key==='Enter'){addTagAdmin(tid,inpRef)}});
+        tagBtn.addEventListener('click',function(){addTagAdmin(tid,inpRef)});
+      })(chat.thread_id,tagInp);
+      addDiv.appendChild(tagInp);
+      addDiv.appendChild(tagBtn);
+      body.appendChild(addDiv);
+
+      var hr=document.createElement('hr');
+      hr.style.cssText='border:none;border-top:1px solid var(--border);margin:6px 0';
+      body.appendChild(hr);
+
+      queries.forEach(function(q){
+        var qRow=document.createElement('div');
+        qRow.className='q-row';
+        var preview=q.user_message.length>60?q.user_message.substring(0,60)+'...':q.user_message;
+        var qh=document.createElement('div');
+        qh.className='q-header';
+        qh.innerHTML=(q.hit_fallback?'&#9888;':'&#9989;')+' Q'+(q.query_index+1)+': &ldquo;'+esc(preview)+'&rdquo; ('+esc(q.query_type)+') &mdash; '+q.total_duration_ms+'ms &middot; '+(q.tokens.total||0)+' tok';
+        qRow.appendChild(qh);
+        if(q.tool_calls){
+          q.tool_calls.forEach(function(tc){
+            var t=document.createElement('div');
+            t.className='q-tool';
+            t.textContent='\u2192 '+(tc.name||'?')+'('+JSON.stringify(tc.args||{})+')';
+            qRow.appendChild(t);
+          });
+        }
+        if(q.final_response_preview){
+          var resp=document.createElement('div');
+          resp.className='q-response';
+          resp.textContent='Response: '+q.final_response_preview;
+          qRow.appendChild(resp);
+        }
+        body.appendChild(qRow);
+      });
+
+      (function(hdr,bdy,arrowId){
+        hdr.addEventListener('click',function(){
+          bdy.classList.toggle('open');
+          var a=document.getElementById(arrowId);
+          if(a) a.classList.toggle('open');
+        });
+      })(header,body,cardId+'_a');
+
+      card.appendChild(header);
+      card.appendChild(body);
+      $adminContent.appendChild(card);
+    }
+  }catch(e){
+    $adminContent.innerHTML+='<div class="admin-empty">Error loading sessions.</div>';
+  }
+}
+
+async function addTagAdmin(threadId,inpEl){
+  var tag=inpEl.value.trim().toLowerCase();
+  if(!tag)return;
+  await fetch(API+'/api/chats/'+threadId+'/tags',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tag:tag})
+  });
+  inpEl.value='';
+  loadAdmin();
+}
+
+async function removeTagAdmin(threadId,tag){
+  await fetch(API+'/api/chats/'+threadId+'/tags/'+encodeURIComponent(tag),{method:'DELETE'});
+  loadAdmin();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   STATUS BAR
+   ══════════════════════════════════════════════════════════════════ */
+
+var healthPopoverEl=null;
+
+async function loadHealth(){
+  try{
+    var r=await fetch(API+'/api/health');
+    var d=await r.json();
+    var dot={healthy:'\uD83D\uDFE2',warning:'\uD83D\uDFE1',error:'\uD83D\uDD34',loading:'\u26AA'}[d.status]||'\u26AA';
+    var label=d.status==='loading'?'Loading...':d.status.charAt(0).toUpperCase()+d.status.slice(1);
+    $healthSeg.textContent=dot+' '+label;
+
+    if(healthPopoverEl){healthPopoverEl.remove();healthPopoverEl=null}
+    if(d.checks&&d.checks.length){
+      healthPopoverEl=document.createElement('div');
+      healthPopoverEl.className='health-popover';
+      d.checks.forEach(function(c){
+        var icon={pass:'\u2705',warn:'\u26A0\uFE0F',fail:'\u274C'}[c.status]||'';
+        var row=document.createElement('div');
+        row.className='hc';
+        row.textContent=icon+' '+c.name+': '+c.status;
+        healthPopoverEl.appendChild(row);
+        var msg=document.createElement('div');
+        msg.className='hc-msg';
+        msg.textContent=c.message;
+        healthPopoverEl.appendChild(msg);
+      });
+      var refreshBtn=document.createElement('button');
+      refreshBtn.className='refresh-btn';
+      refreshBtn.textContent='Refresh';
+      refreshBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        fetch(API+'/api/health/refresh',{method:'POST'});
+        $healthSeg.textContent='\u26AA Refreshing...';
+        setTimeout(loadHealth,3000);
+      });
+      healthPopoverEl.appendChild(refreshBtn);
+      $healthSeg.appendChild(healthPopoverEl);
+    }
+
+    if(d.status==='loading'){
+      setTimeout(loadHealth,2000);
+    }
+  }catch(e){
+    $healthSeg.textContent='\u26AA offline';
+  }
+}
+
+$healthSeg.addEventListener('click',function(e){
+  if(healthPopoverEl) healthPopoverEl.classList.toggle('open');
+});
+document.addEventListener('click',function(e){
+  if(healthPopoverEl && !$healthSeg.contains(e.target)){
+    healthPopoverEl.classList.remove('open');
+  }
+});
+
+async function refreshMeta(){
+  try{
+    var r=await fetch(API+'/api/meta');
+    var d=await r.json();
+    $datasetSeg.textContent=d.dataset.row_count.toLocaleString()+' rows \u00b7 '+d.dataset.num_categories+'c \u00b7 '+d.dataset.num_intents+'i';
+    $tokenSeg.textContent=d.tokens.total.toLocaleString()+' tok \u00b7 ~$'+d.tokens.cost.toFixed(4);
+    $modelSeg.textContent=d.model_short;
+  }catch(e){}
+}
+
+async function loadUsers(){
+  try{
+    var r=await fetch(API+'/api/users');
+    var d=await r.json();
+    $userList.innerHTML='';
+    (d.users||[]).forEach(function(u){
+      var opt=document.createElement('option');
+      opt.value=u;
+      $userList.appendChild(opt);
+    });
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   INIT — everything wrapped in try/catch so one failure
+   does not kill the rest
+   ══════════════════════════════════════════════════════════════════ */
+
+startNewChat();
+loadChatList();
+loadHealth();
+refreshMeta();
+loadUsers();
+
+})();
+</script>
+</body>
+</html>
