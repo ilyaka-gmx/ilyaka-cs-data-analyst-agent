@@ -2,9 +2,9 @@
 Streamlit UI for the Customer Service Data Analyst Agent.
 
 Layout:
-  - Left sidebar: conversation list (search, tags, new chat, settings)
+  - Left sidebar: conversation list (search, tags, new chat, tag mgmt, settings)
   - Main area: Chat tab + Admin tab
-  - Bottom status bar: health, dataset, tokens, model
+  - Bottom of sidebar: status indicator (health, dataset, tokens, model)
 
 Run: uv run streamlit run streamlit_app.py
 """
@@ -14,7 +14,7 @@ import time
 import uuid
 
 import streamlit as st
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import GraphRecursionError
 
@@ -53,6 +53,31 @@ if "user_id" not in st.session_state:
 
 
 # ---------------------------------------------------------------------------
+# Helper: rebuild display from session store (defined before sidebar uses it)
+# ---------------------------------------------------------------------------
+
+
+def _load_display_from_store(thread_id: str) -> list[dict]:
+    """Rebuild chat_display from stored query traces."""
+    chat = store.chats.get(thread_id)
+    if not chat:
+        return []
+    display: list[dict] = []
+    for q in chat.queries:
+        display.append({"role": "user", "content": q.user_message})
+        display.append({
+            "role": "assistant",
+            "content": q.final_response_preview,
+            "reasoning": q.tool_calls,
+            "footer": (
+                f"{q.query_type} · {q.tokens.get('total', 0)} tok "
+                f"· {q.total_duration_ms}ms"
+            ),
+        })
+    return display
+
+
+# ---------------------------------------------------------------------------
 # Health check (interval-based auto-refresh)
 # ---------------------------------------------------------------------------
 
@@ -84,7 +109,7 @@ def _check_health_if_due():
 _check_health_if_due()
 
 # ---------------------------------------------------------------------------
-# Sidebar — Conversations
+# Sidebar — Conversations, Tags, Settings, Status
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
@@ -99,11 +124,15 @@ with st.sidebar:
     search = st.text_input("🔍 Search chats", key="chat_search")
 
     all_tags = store.get_all_tags()
-    active_tags = (
-        st.multiselect("Filter by tags", all_tags, key="tag_filter")
-        if all_tags
-        else []
+    active_tags = st.multiselect(
+        "Filter by tags",
+        all_tags if all_tags else ["(no tags yet)"],
+        default=[],
+        key="tag_filter",
+        disabled=not all_tags,
     )
+    if not all_tags:
+        active_tags = []
 
     chats = store.list_chats(
         tag_filter=active_tags or None, search=search or None
@@ -123,6 +152,33 @@ with st.sidebar:
         if chat.tags:
             st.caption(" ".join(f"🏷 {t}" for t in chat.tags))
         st.caption(f"{chat.updated_at[:16]} · {chat.message_count} msg")
+
+    # --- Tag management for active chat ---
+    active_thread = st.session_state.active_thread
+    active_chat = store.chats.get(active_thread)
+    if active_chat:
+        with st.expander("🏷 Manage Tags"):
+            if active_chat.tags:
+                st.caption("Current tags:")
+                for tag in list(active_chat.tags):
+                    col_tag, col_del = st.columns([4, 1])
+                    col_tag.write(f"🏷 {tag}")
+                    if col_del.button(
+                        "✕", key=f"rmtag_{active_thread}_{tag}"
+                    ):
+                        store.remove_tag(active_thread, tag)
+                        st.rerun()
+            else:
+                st.caption("No tags yet")
+
+            new_tag = st.text_input(
+                "Add tag", key="new_tag_input", placeholder="e.g. refund"
+            )
+            if st.button("Add", key="add_tag_btn"):
+                tag_clean = new_tag.strip().lower()
+                if tag_clean:
+                    store.add_tag(active_thread, tag_clean)
+                    st.rerun()
 
     with st.expander("⚙️ Settings"):
         user_id = st.text_input(
@@ -146,22 +202,43 @@ with st.sidebar:
                 "text/markdown",
             )
 
+    # --- Status bar (native Streamlit, theme-aware, at sidebar bottom) ---
+    st.divider()
+    health_data = st.session_state.get(
+        "last_health", {"status": "unknown", "age": "checking..."}
+    )
+    health_dot = {"healthy": "🟢", "warning": "🟡", "error": "🔴"}.get(
+        health_data.get("status", ""), "⚪"
+    )
+    health_status = health_data.get("status", "unknown").title()
+    health_age = health_data.get("age", "?")
 
-def _load_display_from_store(thread_id: str) -> list[dict]:
-    """Rebuild chat_display from stored query traces."""
-    chat = store.chats.get(thread_id)
-    if not chat:
-        return []
-    display: list[dict] = []
-    for q in chat.queries:
-        display.append({"role": "user", "content": q.user_message})
-        display.append({
-            "role": "assistant",
-            "content": q.final_response_preview,
-            "reasoning": q.tool_calls,
-            "footer": f"{q.query_type} · {q.tokens.get('total', 0)} tok · {q.total_duration_ms}ms",
-        })
-    return display
+    with st.expander(f"{health_dot} {health_status} · {health_age}"):
+        report = health_data.get("report")
+        if report:
+            for check in report.results:
+                icon = "✅" if check.passed else "❌"
+                st.caption(f"{icon} {check.name}: {check.message}")
+        if st.button("🔄 Refresh Health", key="refresh_health"):
+            st.session_state.last_health_time = 0
+            st.rerun()
+
+    session_tokens = (
+        token_tracker.total_prompt_tokens
+        + token_tracker.total_completion_tokens
+    )
+    session_cost = (
+        token_tracker.total_prompt_tokens * 0.20
+        + token_tracker.total_completion_tokens * 0.60
+    ) / 1_000_000
+    model_short = AGENT_MODEL.split("/")[-1]
+
+    st.caption(
+        f"📊 {metadata.row_count:,} rows · "
+        f"{metadata.num_categories} cat · {metadata.num_intents} int"
+    )
+    st.caption(f"💰 {session_tokens:,} tok · ~${session_cost:.4f}")
+    st.caption(f"🤖 {model_short}")
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +275,7 @@ with chat_tab:
             if msg_data.get("footer"):
                 st.caption(msg_data["footer"])
 
-    # Suggestion chips
+    # Suggestion chips (shown on empty chat or after out-of-scope)
     show_suggestions = not st.session_state.get(
         "chat_display"
     ) or st.session_state.get("show_recovery_chips")
@@ -213,23 +290,35 @@ with chat_tab:
                 st.session_state.show_recovery_chips = False
                 st.rerun()
 
-    # Chat input
+    # --- Detect pending query (set by chips or previous rerun) ---
     pending = st.session_state.pop("pending_query", None)
-    user_input = (
-        st.chat_input("Ask about the customer service dataset...") or pending
-    )
+    user_input = st.chat_input("Ask about the customer service dataset...")
 
     if user_input:
-        thread_id = st.session_state.active_thread
-        store.get_or_create_chat(thread_id, st.session_state.user_id)
-        store.update_chat_title(thread_id, user_input)
-
         st.session_state.setdefault("chat_display", []).append(
             {"role": "user", "content": user_input}
         )
-        with st.chat_message("user"):
-            st.markdown(user_input)
+        st.session_state.pending_process = user_input
+        thread_id = st.session_state.active_thread
+        store.get_or_create_chat(thread_id, st.session_state.user_id)
+        store.update_chat_title(thread_id, user_input)
+        st.rerun()
 
+    if pending:
+        st.session_state.setdefault("chat_display", []).append(
+            {"role": "user", "content": pending}
+        )
+        st.session_state.pending_process = pending
+        thread_id = st.session_state.active_thread
+        store.get_or_create_chat(thread_id, st.session_state.user_id)
+        store.update_chat_title(thread_id, pending)
+        st.rerun()
+
+    # --- Process pending query (on the rerun after user message was added) ---
+    query_to_process = st.session_state.pop("pending_process", None)
+
+    if query_to_process:
+        thread_id = st.session_state.active_thread
         graph = st.session_state.graph
         config = {
             "configurable": {"thread_id": thread_id},
@@ -251,10 +340,15 @@ with chat_tab:
             with st.status("🤔 Thinking...", expanded=True) as status:
                 st.write("→ Routing query...")
 
+                error_occurred = False
+                result = None
+
                 try:
                     result = graph.invoke(
                         {
-                            "messages": [HumanMessage(content=user_input)],
+                            "messages": [
+                                HumanMessage(content=query_to_process)
+                            ],
                             "user_id": st.session_state.user_id,
                         },
                         config=config,
@@ -269,12 +363,18 @@ with chat_tab:
                         "Could not complete the analysis within allowed "
                         "steps. Try rephrasing your question."
                     )
-                    st.stop()
+                    error_occurred = True
                 except Exception as e:
                     status.update(
                         label="❌ Error", state="error", expanded=True
                     )
                     st.error(str(e))
+                    error_occurred = True
+
+                if error_occurred:
+                    st.caption(
+                        "💡 Tip: refresh the page to clear the error state."
+                    )
                     st.stop()
 
                 duration = time.time() - start_time
@@ -284,7 +384,9 @@ with chat_tab:
 
                 for step in steps:
                     if step["type"] == "tool_call":
-                        st.write(f"🔧 **{step['name']}**({step['args']})")
+                        st.write(
+                            f"🔧 **{step['name']}**({step['args']})"
+                        )
                     elif step["type"] == "tool_result":
                         st.text(step["content"][:150])
 
@@ -327,7 +429,7 @@ with chat_tab:
         trace = QueryTrace(
             query_index=len(store.get_or_create_chat(thread_id).queries),
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
-            user_message=user_input,
+            user_message=query_to_process,
             query_type=query_type,
             steps=[],
             tool_calls=[s for s in steps if s["type"] == "tool_call"],
@@ -373,10 +475,36 @@ with admin_tab:
                 st.caption(
                     f"Session: `{chat.thread_id}` · User: {chat.user_id}"
                 )
+
+                # --- Tag management in admin ---
                 if chat.tags:
-                    st.caption(
-                        "Tags: " + " ".join(f"🏷 {t}" for t in chat.tags)
-                    )
+                    tag_cols = st.columns(len(chat.tags) + 1)
+                    for j, tag in enumerate(list(chat.tags)):
+                        if tag_cols[j].button(
+                            f"🏷 {tag} ✕",
+                            key=f"adm_rmtag_{chat.thread_id}_{tag}",
+                        ):
+                            store.remove_tag(chat.thread_id, tag)
+                            st.rerun()
+                else:
+                    st.caption("No tags")
+
+                adm_tag_col1, adm_tag_col2 = st.columns([3, 1])
+                adm_new_tag = adm_tag_col1.text_input(
+                    "Add tag",
+                    key=f"adm_newtag_{chat.thread_id}",
+                    label_visibility="collapsed",
+                    placeholder="Add tag...",
+                )
+                if adm_tag_col2.button(
+                    "+", key=f"adm_addtag_{chat.thread_id}"
+                ):
+                    tag_clean = adm_new_tag.strip().lower()
+                    if tag_clean:
+                        store.add_tag(chat.thread_id, tag_clean)
+                        st.rerun()
+
+                st.divider()
 
                 for q in chat.queries:
                     fallback_icon = "⚠️" if q.hit_fallback else "✅"
@@ -401,54 +529,8 @@ with admin_tab:
                             )
 
                     if q.final_response_preview:
-                        st.caption(f"Response: {q.final_response_preview}")
+                        st.caption(
+                            f"Response: {q.final_response_preview}"
+                        )
 
                     st.divider()
-
-# ---------------------------------------------------------------------------
-# Bottom Status Bar (fixed CSS footer)
-# ---------------------------------------------------------------------------
-
-health_data = st.session_state.get(
-    "last_health", {"status": "unknown", "age": "checking..."}
-)
-dataset_info = (
-    f"📊 {metadata.row_count:,} · "
-    f"{metadata.num_categories} cat · {metadata.num_intents} int"
-)
-session_tokens = (
-    token_tracker.total_prompt_tokens + token_tracker.total_completion_tokens
-)
-session_cost = (
-    token_tracker.total_prompt_tokens * 0.20
-    + token_tracker.total_completion_tokens * 0.60
-) / 1_000_000
-model_short = AGENT_MODEL.split("/")[-1]
-
-health_dot = {"healthy": "🟢", "warning": "🟡", "error": "🔴"}.get(
-    health_data.get("status", ""), "⚪"
-)
-
-status_bar_html = f"""
-<div style="
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
-    background: var(--background-color, #0e1117);
-    border-top: 1px solid #333;
-    padding: 6px 20px;
-    font-size: 12px;
-    color: #888;
-    display: flex;
-    gap: 16px;
-    align-items: center;
-">
-    <span>{health_dot} {health_data.get('status', 'unknown').title()} · {health_data.get('age', '?')}</span>
-    <span>│</span>
-    <span>{dataset_info}</span>
-    <span>│</span>
-    <span>💰 {session_tokens:,} tok · ~${session_cost:.4f}</span>
-    <span>│</span>
-    <span>🤖 {model_short}</span>
-</div>
-"""
-st.markdown(status_bar_html, unsafe_allow_html=True)
-st.markdown('<div style="height: 40px;"></div>', unsafe_allow_html=True)
