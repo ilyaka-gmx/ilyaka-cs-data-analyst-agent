@@ -374,7 +374,20 @@ def recall_profile() -> str:
     return get_facts(get_current_user_id())
 
 
-# --- Tool list helper ---
+# --- Tool groups and dynamic exposure ---
+
+DATA_TOOL_NAMES = [
+    "list_categories", "list_intents", "count_rows",
+    "get_distribution", "get_examples", "search_instructions",
+]
+ANALYSIS_TOOL_NAMES = DATA_TOOL_NAMES + ["summarize_responses"]
+MEMORY_TOOL_NAMES = ["remember_fact", "recall_profile"]
+
+TOOL_EXPOSURE_MAP: dict[str, list[str]] = {
+    "structured": DATA_TOOL_NAMES + MEMORY_TOOL_NAMES,
+    "unstructured": ANALYSIS_TOOL_NAMES + MEMORY_TOOL_NAMES,
+    "out_of_scope": [],
+}
 
 
 def get_all_tools() -> list:
@@ -390,3 +403,16 @@ def get_all_tools() -> list:
         remember_fact,
         recall_profile,
     ]
+
+
+def get_tools_for_query_type(query_type: str) -> list:
+    """Return filtered tool objects based on router's query classification.
+
+    Structured queries get data + memory tools (no summarize_responses).
+    Unstructured queries get all analysis + memory tools.
+    Falls back to all tools for unknown query types.
+    """
+    allowed_names = TOOL_EXPOSURE_MAP.get(query_type)
+    if allowed_names is None:
+        return get_all_tools()
+    return [t for t in get_all_tools() if t.name in allowed_names]

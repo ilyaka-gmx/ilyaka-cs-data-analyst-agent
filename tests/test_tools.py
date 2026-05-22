@@ -201,3 +201,44 @@ def test_metadata_category_intent_map():
     assert "get_refund" in metadata.category_intent_map["REFUND"]
     assert "cancel_order" in metadata.category_intent_map["ORDER"]
     assert "cancel_order" not in metadata.category_intent_map["REFUND"]
+
+
+# --- Dynamic tool exposure ---
+
+
+def test_tool_exposure_structured():
+    from src.tools import get_tools_for_query_type
+
+    tools = get_tools_for_query_type("structured")
+    names = [t.name for t in tools]
+    assert "count_rows" in names
+    assert "list_categories" in names
+    assert "remember_fact" in names
+    assert "summarize_responses" not in names
+
+
+def test_tool_exposure_unstructured():
+    from src.tools import get_tools_for_query_type
+
+    tools = get_tools_for_query_type("unstructured")
+    names = [t.name for t in tools]
+    assert "summarize_responses" in names
+    assert "count_rows" in names
+    assert "remember_fact" in names
+
+
+def test_tool_exposure_includes_memory():
+    from src.tools import get_tools_for_query_type
+
+    for qt in ("structured", "unstructured"):
+        tools = get_tools_for_query_type(qt)
+        names = [t.name for t in tools]
+        assert "remember_fact" in names
+        assert "recall_profile" in names
+
+
+def test_tool_exposure_fallback():
+    from src.tools import get_tools_for_query_type
+
+    tools = get_tools_for_query_type("unknown_type")
+    assert len(tools) == 9

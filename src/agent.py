@@ -36,7 +36,7 @@ from src.config import AGENT_MODEL, MAX_ITERATIONS, get_llm
 from src.middleware import TokenTrackingMiddleware, ToolTimingMiddleware
 from src.prompts import AGENT_SYSTEM_PROMPT, DECLINE_MESSAGE
 from src.router import classify_query
-from src.tools import get_all_tools, set_current_user_id
+from src.tools import get_all_tools, get_tools_for_query_type, set_current_user_id
 
 
 log = logging.getLogger(__name__)
@@ -113,7 +113,9 @@ def agent_step(state: AgentState) -> dict:
 
     set_current_user_id(state.get("user_id", "default"))
     llm = get_llm(AGENT_MODEL, temperature=0)
-    all_tools = get_all_tools()
+
+    query_type = state.get("query_type", "structured")
+    exposed_tools = get_tools_for_query_type(query_type)
 
     if force_text:
         bound_llm = llm
@@ -122,7 +124,7 @@ def agent_step(state: AgentState) -> dict:
             "Please provide your final answer based on the results you have."
         ))]
     else:
-        bound_llm = llm.bind_tools(all_tools)
+        bound_llm = llm.bind_tools(exposed_tools)
         inject = []
 
     sys_msg = SystemMessage(content=AGENT_SYSTEM_PROMPT)
@@ -133,7 +135,7 @@ def agent_step(state: AgentState) -> dict:
         model=bound_llm,
         messages=invoke_messages,
         system_message=None,
-        tools=[] if force_text else all_tools,
+        tools=[] if force_text else exposed_tools,
         tool_choice=None,
     )
 
