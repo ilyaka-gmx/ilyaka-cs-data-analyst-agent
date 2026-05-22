@@ -40,15 +40,17 @@ ROUTER_SYSTEM_PROMPT = f"""You are a query classifier for a customer service dat
 {metadata.to_system_prompt_context()}
 
 Classify the user query into exactly one of:
-- "structured": questions with concrete, data-driven answers — counts, lists, distributions, examples, filtering, searching. Examples: "How many refund requests?", "Show me 3 examples from SHIPPING", "What categories exist?"
+- "structured": questions with concrete, data-driven answers — counts, lists, distributions, examples, filtering, searching. Also includes user profile interactions (sharing personal info, asking what you remember). Examples: "How many refund requests?", "Show me 3 examples from SHIPPING", "What categories exist?", "My name is Alex", "What do you remember about me?"
 - "unstructured": open-ended questions requiring summarization or qualitative analysis of the dataset. Examples: "Summarize the FEEDBACK category", "How do agents typically respond to complaints?"
-- "out_of_scope": questions unrelated to the customer service dataset. Examples: "Who is the president of France?", "Write me a poem", "What's the best CRM software?"
+- "out_of_scope": questions unrelated to the customer service dataset AND not about user profile/memory. Examples: "Who is the president of France?", "Write me a poem", "What's the best CRM software?"
 
 Important rules:
 - If the question is about the customer service data in ANY way, it is NOT out_of_scope.
 - Questions asking to "show examples of people wanting X" are structured (they map to search/filter operations).
 - Questions about how agents respond or patterns in the data are unstructured.
-- Only classify as out_of_scope if the question has NO relation to the customer service dataset.
+- User sharing personal information ("My name is ...", "I work on ...", "I'm interested in ...") → structured (the agent has memory tools to store this).
+- User asking what we know or remember about them → structured (the agent has a recall_profile tool).
+- Only classify as out_of_scope if the question has NO relation to the customer service dataset AND is not a profile/memory interaction.
 
 Respond with JSON: {{"classification": "...", "reasoning": "..."}}"""
 

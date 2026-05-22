@@ -31,14 +31,14 @@ NEBIUS_BASE_URL: str = os.environ.get(
 # --- Model IDs ---
 # Configurable via .env — grader can override if their account differs
 
-AGENT_MODEL: str = os.environ.get("AGENT_MODEL", "deepseek-ai/DeepSeek-V3.2")
+AGENT_MODEL: str = os.environ.get("AGENT_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507")
 ROUTER_MODEL: str = os.environ.get(
     "ROUTER_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507"
 )
 JUDGE_MODEL: str = os.environ.get(
-    "JUDGE_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    "JUDGE_MODEL", "meta-llama/Llama-3.3-70B-Instruct"
 )
-FALLBACK_AGENT_MODEL: str = "meta-llama/Llama-3.3-70B-Instruct"
+FALLBACK_AGENT_MODEL: str = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 # --- Paths ---
 

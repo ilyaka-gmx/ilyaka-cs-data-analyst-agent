@@ -98,3 +98,24 @@ def test_reasoning_populated():
     result = classify_query("How many complaints did we get?")
     assert result.classification == "structured"
     assert len(result.reasoning) > 10
+
+
+# --- Memory / profile queries (Gate 5) ---
+
+
+@pytest.mark.slow
+def test_memory_share_personal_info():
+    """User sharing personal info should route to the agent (not out_of_scope)."""
+    result = classify_query("My name is Alex and I work in the refund department.")
+    assert result.classification in ("structured", "unstructured"), (
+        f"Personal info should route to agent, got: {result.classification}"
+    )
+
+
+@pytest.mark.slow
+def test_memory_recall():
+    """Asking what the agent remembers should route to the agent."""
+    result = classify_query("What do you remember about me?")
+    assert result.classification in ("structured", "unstructured"), (
+        f"Memory recall should route to agent, got: {result.classification}"
+    )
