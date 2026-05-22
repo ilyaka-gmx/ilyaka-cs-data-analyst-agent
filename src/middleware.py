@@ -2,13 +2,25 @@
 Middleware harness for the Customer Service Data Analyst Agent.
 
 Uses LangChain's AgentMiddleware system (langchain>=1.3.0) with composable hooks.
-Middleware instances are passed to ``create_agent(middleware=[...])`` which wires
-them into the agent's ReAct loop automatically.
+Middleware instances are real AgentMiddleware subclasses whose hook methods are
+invoked explicitly in the manual ReAct loop (src/agent.py):
 
-Stack (outermost → innermost):
-  1. TokenTrackingMiddleware  — wrap_model_call: accumulates per-query token usage
-  2. ToolTimingMiddleware     — wrap_tool_call: records execution time per tool call
-  3. SummarizationMiddleware  — before_model (prebuilt): compresses old messages
+  - TokenTrackingMiddleware.wrap_model_call: called directly in agent_step
+    with proper ModelRequest/ModelResponse objects
+  - ToolTimingMiddleware.wrap_tool_call: passed to ToolNode(wrap_tool_call=...)
+    which constructs ToolCallRequest internally
+
+Architecture decision: We invoke hooks explicitly instead of passing middleware
+to create_agent because create_agent's internal graph is a black box that
+causes infinite loops with Llama-3.3-70B and cannot handle DeepSeek's DSML
+XML leak.  By owning the ReAct loop, we get loop detection, iteration limits,
+and DSML repair while keeping real AgentMiddleware classes.
+
+SummarizationMiddleware note:
+  Replaced with trim_messages() in agent.py.  The manual loop truncates old
+  messages instead of LLM-summarizing them.  For short interactive sessions
+  this is sufficient; LLM summarization can be added back as a standalone
+  function if needed for longer web UI sessions.
 
 ToolBounds note:
   Tool input bounds (e.g. get_examples n ∈ [1, 20]) are enforced by Pydantic
