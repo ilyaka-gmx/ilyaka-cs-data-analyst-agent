@@ -122,6 +122,49 @@ def test_tags_endpoint(client):
     assert "beta" in data["tags"]
 
 
+# --- Delete ---
+
+
+def test_delete_single_chat(client):
+    client.post("/api/chats/del_test_1/tags", json={"tag": "x"})
+    resp = client.delete("/api/chats/del_test_1")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    resp2 = client.get("/api/chats/del_test_1")
+    assert resp2.status_code == 404
+
+
+def test_delete_all_chats(client):
+    client.post("/api/chats/del_all_1/tags", json={"tag": "a"})
+    client.post("/api/chats/del_all_2/tags", json={"tag": "b"})
+    resp = client.delete("/api/chats")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+
+# --- Memory Insights ---
+
+
+def test_memory_endpoint(client):
+    resp = client.get("/api/memory")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "working" in data
+    assert "episodic" in data
+    assert "semantic" in data
+    assert "procedural" in data
+    assert isinstance(data["episodic"]["total_sessions"], int)
+    assert isinstance(data["semantic"]["total_facts"], int)
+    assert isinstance(data["procedural"]["total_tool_calls"], int)
+
+
+def test_memory_with_session(client):
+    resp = client.get("/api/memory?session_id=nonexistent_session")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["working"]["message_count"] == 0
+
+
 # --- SSE Chat (slow, LLM-dependent) ---
 
 

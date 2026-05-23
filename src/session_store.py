@@ -33,6 +33,7 @@ class QueryTrace:
     total_duration_ms: int = 0
     hit_fallback: bool = False
     final_response_preview: str = ""
+    memory_ops: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -132,6 +133,17 @@ class SessionStore:
             chat.message_count += 2
             chat.updated_at = datetime.now(timezone.utc).isoformat()
             self._save()
+
+    def delete_chat(self, thread_id: str) -> bool:
+        if thread_id in self.chats:
+            del self.chats[thread_id]
+            self._save()
+            return True
+        return False
+
+    def delete_all_chats(self):
+        self.chats.clear()
+        self._save()
 
     def list_chats(
         self,

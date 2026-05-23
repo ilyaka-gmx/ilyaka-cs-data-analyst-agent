@@ -17,6 +17,10 @@
   --step-route:#7c3aed;--step-tool:#0891b2;--step-result:#b45309;
   --status-bg:#f0f1f3;--status-border:#e2e4e9;
   --tag-active-bg:#0d9488;--tag-active-text:#fff;
+  --mt-working-bg:#e0f2fe;--mt-working-fg:#0369a1;
+  --mt-episodic-bg:#fef3c7;--mt-episodic-fg:#b45309;
+  --mt-semantic-bg:#fce7f3;--mt-semantic-fg:#be185d;
+  --mt-procedural-bg:#ecfccb;--mt-procedural-fg:#4d7c0f;
 }
 [data-theme="dark"]{
   --bg:#111318;--surface:#1a1d23;--raised:#22252d;--border:#2e3039;
@@ -29,6 +33,10 @@
   --step-route:#a78bfa;--step-tool:#22d3ee;--step-result:#facc15;
   --status-bg:#1a1d23;--status-border:#2e3039;
   --tag-active-bg:#2dd4bf;--tag-active-text:#111318;
+  --mt-working-bg:#0c4a6e;--mt-working-fg:#7dd3fc;
+  --mt-episodic-bg:#78350f;--mt-episodic-fg:#fde68a;
+  --mt-semantic-bg:#831843;--mt-semantic-fg:#f9a8d4;
+  --mt-procedural-bg:#365314;--mt-procedural-fg:#bef264;
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden;transition:background .2s,color .2s}
 
@@ -37,13 +45,17 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .sb-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .sb-logo{width:28px;height:28px;background:var(--accent);border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
 .sb-header .title{font-size:14px;font-weight:600;flex:1}
-.theme-btn{width:30px;height:30px;border:1px solid var(--border);border-radius:6px;background:var(--raised);color:var(--text-dim);cursor:pointer;display:grid;place-items:center;font-size:14px;transition:.15s;padding:0}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 
 .sb-user{padding:8px 16px;border-bottom:1px solid var(--border)}
 .sb-user label{display:block;font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-.sb-user input{width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:13px;transition:.2s}
-.sb-user input:focus{outline:none;border-color:var(--accent)}
+.user-combo{position:relative}
+.user-combo input{width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:13px;transition:.2s}
+.user-combo input:focus{outline:none;border-color:var(--accent)}
+.user-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;max-height:150px;overflow-y:auto;z-index:5;box-shadow:0 4px 8px rgba(0,0,0,.1)}
+.user-dropdown.open{display:block}
+.user-dropdown-item{padding:5px 8px;cursor:pointer;font-size:13px;transition:.1s}
+.user-dropdown-item:hover{background:var(--accent-bg);color:var(--accent)}
+.user-dropdown-item.active{font-weight:600;color:var(--accent)}
 
 .sb-actions{padding:8px 16px;display:flex;gap:6px}
 .btn-new{flex:1;padding:7px 12px;background:var(--accent);border:none;border-radius:5px;color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;text-align:center}
@@ -54,7 +66,6 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .sb-search input:focus{outline:none;border-color:var(--accent)}
 .sb-search input::placeholder{color:var(--text-faint)}
 
-/* Tag filter row */
 .sb-tag-filter{padding:4px 16px 2px;display:flex;flex-wrap:wrap;gap:4px;min-height:0}
 .tag-pill{display:inline-block;font-size:10px;padding:2px 7px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin:0;cursor:pointer;transition:.15s;border:1px solid transparent;user-select:none}
 .tag-pill:hover{border-color:var(--accent)}
@@ -72,7 +83,6 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .chat-item .ci-tags{margin-top:2px}
 .ci-tag{display:inline-block;font-size:9px;padding:1px 5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-right:2px}
 
-/* Sidebar sections */
 .sb-section{border-top:1px solid var(--border)}
 .sb-toggle{display:flex;align-items:center;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);user-select:none}
 .sb-toggle:hover{color:var(--accent)}
@@ -89,18 +99,24 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .tag-add input{flex:1;padding:3px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font:inherit;font-size:11px}
 .tag-add input:focus{outline:none;border-color:var(--accent)}
 .tag-add button{padding:3px 8px;background:var(--accent);border:none;border-radius:3px;color:#fff;font-size:11px;cursor:pointer}
-.sb-settings-content{font-size:12px}
-.export-btn{display:block;width:100%;padding:6px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font:inherit;font-size:12px;cursor:pointer;text-align:left;margin-top:4px;transition:.15s}
-.export-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 
 /* ── MAIN ── */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 
 /* Tabs */
-.tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);transition:.2s}
+.tab-bar{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--surface);transition:.2s}
 .tab-btn{padding:10px 20px;font:inherit;font-size:13px;font-weight:500;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:.15s}
 .tab-btn:hover{color:var(--text)}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-bar-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px}
+.tab-action{padding:5px 12px;background:none;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;color:var(--text-dim);cursor:pointer;transition:.15s;white-space:nowrap}
+.tab-action:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.theme-seg{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.theme-seg button{padding:4px 9px;border:none;background:none;font-size:11px;cursor:pointer;color:var(--text-dim);transition:.15s;font-family:inherit}
+.theme-seg button:not(:last-child){border-right:1px solid var(--border)}
+.theme-seg button.active{background:var(--accent);color:#fff}
+.theme-seg button:hover:not(.active){background:var(--accent-bg);color:var(--accent)}
+
 .tab-content{display:none;flex:1;overflow-y:auto}
 .tab-content.active{display:flex;flex-direction:column}
 
@@ -122,6 +138,14 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .step.tool{color:var(--step-tool);border-color:var(--step-tool)}
 .step.result{color:var(--step-result);border-color:var(--step-result)}
 .msg-footer{font-size:11px;color:var(--text-faint);margin-top:6px}
+
+/* Memory trace badges in chat */
+.memory-trace{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.mt-badge{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:500}
+.mt-badge.working{background:var(--mt-working-bg);color:var(--mt-working-fg)}
+.mt-badge.episodic{background:var(--mt-episodic-bg);color:var(--mt-episodic-fg)}
+.mt-badge.semantic{background:var(--mt-semantic-bg);color:var(--mt-semantic-fg)}
+.mt-badge.procedural{background:var(--mt-procedural-bg);color:var(--mt-procedural-fg)}
 
 /* Suggestion chips */
 .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
@@ -173,6 +197,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .admin-card-header:hover{background:var(--accent-bg)}
 .admin-card-header .arrow{font-size:10px;transition:transform .15s;display:inline-block}
 .admin-card-header .arrow.open{transform:rotate(90deg)}
+.admin-card-header .session-id{font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--text-faint);background:var(--raised);padding:1px 5px;border-radius:3px}
 .admin-card-body{display:none;padding:0 14px 10px;font-size:12px}
 .admin-card-body.open{display:block}
 .admin-card-body .q-row{padding:6px 0;border-bottom:1px solid var(--border)}
@@ -180,8 +205,45 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .admin-card-body .q-header{font-weight:500}
 .admin-card-body .q-tool{font-family:monospace;font-size:11px;color:var(--step-tool);margin:2px 0 2px 12px}
 .admin-card-body .q-response{color:var(--text-dim);margin-top:2px}
+.admin-del-btn{margin-left:auto;padding:2px 8px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-faint);font-size:12px;cursor:pointer;transition:.15s;flex-shrink:0}
+.admin-del-btn:hover{border-color:var(--red);color:var(--red);background:rgba(220,38,38,.08)}
 
-@media(max-width:768px){.sidebar{display:none}.msg{max-width:92%}}
+/* Memory Insights tab */
+.memory-tab{padding:20px 24px}
+.memory-tab h3{font-size:16px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.memory-tab h3 .mem-refresh{padding:4px 10px;background:none;border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text-dim);cursor:pointer;transition:.15s;font-family:inherit}
+.memory-tab h3 .mem-refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.memory-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.memory-panel{border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;transition:.2s}
+.mp-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.mp-icon{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.mp-info{flex:1;min-width:0}
+.mp-title{font-size:14px;font-weight:600}
+.mp-sub{font-size:11px;color:var(--text-faint)}
+.mp-kpi{font-size:20px;font-weight:700;color:var(--accent);text-align:right}
+.mp-body{padding:12px 16px;font-size:13px;line-height:1.6}
+.mp-body .mp-row{display:flex;justify-content:space-between;margin:2px 0}
+.mp-body .mp-label{color:var(--text-dim)}
+.mp-body .mp-val{font-weight:500}
+.mp-body .mp-list{margin-top:6px}
+.mp-body .mp-list-item{padding:3px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.mp-body .mp-list-item:last-child{border-bottom:none}
+.mp-body .mp-list-item .li-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.mp-body .mp-list-item .li-meta{font-size:11px;color:var(--text-faint);white-space:nowrap}
+.mp-section-title{font-size:12px;font-weight:600;color:var(--text-dim);margin:8px 0 4px;text-transform:uppercase;letter-spacing:.3px}
+.tool-bar-row{display:flex;align-items:center;gap:6px;margin:3px 0}
+.tool-bar-name{width:110px;font-size:11px;font-family:'SF Mono',Consolas,monospace;text-align:right;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool-bar{flex:1;height:14px;background:var(--raised);border-radius:2px;overflow:hidden}
+.tool-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s}
+.tool-bar-count{font-size:11px;color:var(--text-faint);width:28px;text-align:right}
+.qt-dist{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
+.qt-badge{font-size:11px;padding:2px 8px;border-radius:3px;background:var(--raised);color:var(--text-dim)}
+.fact-user{font-size:12px;font-weight:600;color:var(--text);margin:6px 0 2px}
+.fact-item{font-size:12px;color:var(--text-dim);margin:1px 0 1px 12px}
+.fact-item::before{content:'\2022';margin-right:6px;color:var(--accent)}
+.mp-empty{color:var(--text-faint);font-size:12px;font-style:italic}
+
+@media(max-width:768px){.sidebar{display:none}.msg{max-width:92%}.memory-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -191,13 +253,14 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
   <div class="sb-header">
     <div class="sb-logo">CS</div>
     <span class="title">Data Analyst</span>
-    <button class="theme-btn" id="themeBtn" title="Toggle theme">&#9789;</button>
   </div>
 
   <div class="sb-user">
     <label>User</label>
-    <input id="userId" list="userList" placeholder="default" autocomplete="off">
-    <datalist id="userList"></datalist>
+    <div class="user-combo" id="userCombo">
+      <input id="userId" placeholder="default" autocomplete="off">
+      <div class="user-dropdown" id="userDropdown"></div>
+    </div>
   </div>
 
   <div class="sb-actions">
@@ -218,17 +281,6 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
     </div>
     <div class="sb-panel" id="tagsPanel"></div>
   </div>
-
-  <div class="sb-section">
-    <div class="sb-toggle" id="settingsToggle">
-      <span class="arrow" id="settingsArrow">&#9654;</span> Settings
-    </div>
-    <div class="sb-panel" id="settingsPanel">
-      <div class="sb-settings-content">
-        <button class="export-btn" id="exportBtn">Export Conversation</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ── MAIN ── -->
@@ -236,6 +288,15 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="chat">Chat</button>
     <button class="tab-btn" data-tab="admin">Admin</button>
+    <button class="tab-btn" data-tab="memory">Memory Insights</button>
+    <div class="tab-bar-right">
+      <button class="tab-action" id="exportBtn" title="Export conversation as Markdown">Export &#8595;</button>
+      <div class="theme-seg" id="themeSeg">
+        <button data-tv="system" title="Follow system preference">Auto</button>
+        <button data-tv="light" title="Light theme">&#9788;</button>
+        <button data-tv="dark" title="Dark theme">&#9789;</button>
+      </div>
+    </div>
   </div>
 
   <!-- CHAT TAB -->
@@ -250,6 +311,11 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
   <!-- ADMIN TAB -->
   <div class="tab-content" id="adminTab">
     <div class="admin" id="adminContent"></div>
+  </div>
+
+  <!-- MEMORY INSIGHTS TAB -->
+  <div class="tab-content" id="memoryTab">
+    <div class="memory-tab" id="memoryContent"></div>
   </div>
 
   <!-- STATUS BAR -->
@@ -284,8 +350,10 @@ var activeThread = null;
 var chatMessages = [];
 var allChats = [];
 var allTags = [];
+var allUsers = [];
 var activeTagFilter = null;
 var isSending = false;
+var currentThemeMode = 'system';
 
 /* ── DOM refs ── */
 var $messages   = document.getElementById('messages');
@@ -294,8 +362,7 @@ var $sendBtn    = document.getElementById('sendBtn');
 var $chatList   = document.getElementById('chatList');
 var $search     = document.getElementById('searchInput');
 var $userId     = document.getElementById('userId');
-var $userList   = document.getElementById('userList');
-var $themeBtn   = document.getElementById('themeBtn');
+var $userDropdown = document.getElementById('userDropdown');
 var $healthSeg  = document.getElementById('healthSeg');
 var $datasetSeg = document.getElementById('datasetSeg');
 var $tokenSeg   = document.getElementById('tokenSeg');
@@ -303,6 +370,8 @@ var $modelSeg   = document.getElementById('modelSeg');
 var $tagsPanel  = document.getElementById('tagsPanel');
 var $tagFilter  = document.getElementById('tagFilterArea');
 var $adminContent = document.getElementById('adminContent');
+var $memoryContent = document.getElementById('memoryContent');
+var $exportBtn  = document.getElementById('exportBtn');
 
 /* ── Util ── */
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
@@ -310,37 +379,98 @@ function makeId(){return Math.random().toString(36).substring(2,10)}
 function scrollBottom(){$messages.scrollTop=$messages.scrollHeight}
 function getUser(){return $userId.value.trim()||'default'}
 
-/* ── Theme ── */
-function setTheme(t){
-  document.documentElement.setAttribute('data-theme',t);
-  $themeBtn.innerHTML = t==='dark' ? '&#9788;' : '&#9789;';
-  try{localStorage.setItem('theme',t)}catch(e){}
-}
-$themeBtn.addEventListener('click',function(){
-  setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
-});
-try{var saved=localStorage.getItem('theme');if(saved)setTheme(saved)}catch(e){}
+/* ══════════════════════════════════════════════════════════════════
+   THEME (System / Light / Dark)
+   ══════════════════════════════════════════════════════════════════ */
 
-/* ── User ── */
+function applyTheme(mode){
+  currentThemeMode = mode;
+  var effective = mode;
+  if(mode === 'system'){
+    effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', effective);
+  document.querySelectorAll('.theme-seg button').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-tv') === mode);
+  });
+  try{localStorage.setItem('theme', mode)}catch(e){}
+}
+
+document.querySelectorAll('.theme-seg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    applyTheme(btn.getAttribute('data-tv'));
+  });
+});
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){
+  if(currentThemeMode === 'system') applyTheme('system');
+});
+
+try{var savedTheme = localStorage.getItem('theme'); applyTheme(savedTheme || 'system')}catch(e){applyTheme('system')}
+
+/* ══════════════════════════════════════════════════════════════════
+   USER COMBO-BOX (shows all users on focus)
+   ══════════════════════════════════════════════════════════════════ */
+
 try{var savedUser=localStorage.getItem('userId');if(savedUser)$userId.value=savedUser}catch(e){}
-$userId.addEventListener('change',function(){
-  try{localStorage.setItem('userId',this.value)}catch(e){}
-  activeTagFilter=null;
+
+function renderUserDropdown(){
+  $userDropdown.innerHTML='';
+  var current = getUser();
+  allUsers.forEach(function(u){
+    var item = document.createElement('div');
+    item.className = 'user-dropdown-item' + (u === current ? ' active' : '');
+    item.textContent = u;
+    item.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      $userId.value = u;
+      $userDropdown.classList.remove('open');
+      try{localStorage.setItem('userId', u)}catch(e){}
+      activeTagFilter = null;
+      startNewChat();
+      loadChatList();
+    });
+    $userDropdown.appendChild(item);
+  });
+}
+
+$userId.addEventListener('focus', function(){
+  renderUserDropdown();
+  $userDropdown.classList.add('open');
+});
+$userId.addEventListener('blur', function(){
+  setTimeout(function(){$userDropdown.classList.remove('open')}, 150);
+});
+$userId.addEventListener('change', function(){
+  try{localStorage.setItem('userId', this.value)}catch(e){}
+  activeTagFilter = null;
   startNewChat();
   loadChatList();
   loadUsers();
 });
 
-/* ── Tab switching ── */
+/* ══════════════════════════════════════════════════════════════════
+   TAB SWITCHING
+   ══════════════════════════════════════════════════════════════════ */
+
+function updateExportVisibility(tab){
+  $exportBtn.style.display = (tab === 'chat') ? '' : 'none';
+}
+
 document.querySelectorAll('.tab-btn').forEach(function(btn){
   btn.addEventListener('click',function(){
     document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
     document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active')});
     btn.classList.add('active');
-    document.getElementById(btn.dataset.tab+'Tab').classList.add('active');
-    if(btn.dataset.tab==='admin') loadAdmin();
+    var tab = btn.dataset.tab;
+    document.getElementById(tab+'Tab').classList.add('active');
+    updateExportVisibility(tab);
+    if(tab==='admin') loadAdmin();
+    if(tab==='memory') loadMemory();
   });
 });
+
+updateExportVisibility('chat');
 
 /* ── Sidebar panels ── */
 document.getElementById('tagToggle').addEventListener('click',function(){
@@ -349,15 +479,9 @@ document.getElementById('tagToggle').addEventListener('click',function(){
   $tagsPanel.classList.toggle('open');
   if($tagsPanel.classList.contains('open')) renderTagPanel();
 });
-document.getElementById('settingsToggle').addEventListener('click',function(){
-  var arrow=document.getElementById('settingsArrow');
-  var panel=document.getElementById('settingsPanel');
-  arrow.classList.toggle('open');
-  panel.classList.toggle('open');
-});
 
 /* ── Export ── */
-document.getElementById('exportBtn').addEventListener('click',function(){
+$exportBtn.addEventListener('click',function(){
   if(!chatMessages.length){alert('No messages to export.');return}
   var lines=['# Conversation Export\n'];
   chatMessages.forEach(function(m){
@@ -493,10 +617,7 @@ async function loadAllTags(){
 }
 
 function renderTagFilter(){
-  if(!allTags.length){
-    $tagFilter.innerHTML='';
-    return;
-  }
+  if(!allTags.length){$tagFilter.innerHTML='';return}
   var wrap=document.createElement('div');
   wrap.className='sb-tag-filter';
   allTags.forEach(function(tag){
@@ -535,14 +656,21 @@ async function switchToChat(threadId){
 
 function renderLoadedMessages(queries){
   $messages.innerHTML='';
+  var qIdx = 0;
   chatMessages.forEach(function(m){
     if(m.role==='user'){
       appendUserBubble(m.content);
     } else {
-      var q=queries.find(function(qq){
-        return qq.final_response_preview && m.content && m.content.indexOf(qq.final_response_preview.substring(0,40))===0;
-      });
-      appendBotBubble(m.content, q?q.tool_calls:[], q);
+      var q = queries[qIdx] || null;
+      if(q) qIdx++;
+      var answerLike = q ? {
+        query_type: q.query_type,
+        tokens: q.tokens,
+        duration_ms: q.total_duration_ms,
+        tool_count: (q.tool_calls||[]).length,
+        memory_ops: q.memory_ops || {}
+      } : null;
+      appendBotBubble(m.content, q?q.tool_calls:[], answerLike);
     }
   });
   showSuggestionChips();
@@ -650,6 +778,29 @@ function appendUserBubble(text){
   scrollBottom();
 }
 
+function getMemoryBadges(steps, memOps){
+  var mo = memOps || {};
+  var ctxLabel = mo.context_messages ? ' ('+mo.context_messages+' msg)' : '';
+  var badges=[
+    {type:'working', label:'Working'+ctxLabel},
+    {type:'episodic', label:'Episodic'}
+  ];
+  var toolCalls=(steps||[]).filter(function(s){return s.type==='tool_call'});
+  if(toolCalls.length){
+    badges.push({type:'procedural',label:'Procedural: '+toolCalls.length+' tool'+(toolCalls.length>1?'s':'')});
+  }
+  var semTools = (mo.semantic_tools && mo.semantic_tools.length) ? mo.semantic_tools : [];
+  var semFromSteps = toolCalls.filter(function(s){return s.name==='remember_fact'||s.name==='recall_profile'});
+  if(semTools.length){
+    var ops = semTools.map(function(n){return n==='remember_fact'?'write':'read'});
+    badges.push({type:'semantic',label:'Semantic: '+ops.join(', ')});
+  } else if(semFromSteps.length){
+    var ops = semFromSteps.map(function(s){return s.name==='remember_fact'?'write':'read'});
+    badges.push({type:'semantic',label:'Semantic: '+ops.join(', ')});
+  }
+  return badges;
+}
+
 function appendBotBubble(text,steps,answerData){
   var el=document.createElement('div');
   el.className='msg bot';
@@ -683,6 +834,20 @@ function appendBotBubble(text,steps,answerData){
     });
     el.appendChild(toggle);
     el.appendChild(reasoningBox);
+  }
+
+  var memOps = answerData ? (answerData.memory_ops || {}) : {};
+  var badges=getMemoryBadges(steps, memOps);
+  if(badges.length){
+    var traceEl=document.createElement('div');
+    traceEl.className='memory-trace';
+    badges.forEach(function(b){
+      var badge=document.createElement('span');
+      badge.className='mt-badge '+b.type;
+      badge.textContent=b.label;
+      traceEl.appendChild(badge);
+    });
+    el.appendChild(traceEl);
   }
 
   if(answerData){
@@ -795,11 +960,25 @@ async function removeTagFromChat(tag){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ADMIN TAB
+   ADMIN TAB (with session ID in header)
    ══════════════════════════════════════════════════════════════════ */
 
 async function loadAdmin(){
-  $adminContent.innerHTML='<h3>Session Traces</h3>';
+  $adminContent.innerHTML='';
+  var heading=document.createElement('div');
+  heading.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:12px';
+  heading.innerHTML='<h3 style="margin:0;font-size:16px;font-weight:600">Session Traces</h3>';
+  var cleanBtn=document.createElement('button');
+  cleanBtn.className='tab-action';
+  cleanBtn.textContent='Clean All History';
+  cleanBtn.style.cssText='color:var(--red);border-color:var(--red)';
+  cleanBtn.addEventListener('click',function(){
+    if(!confirm('Delete ALL chat history and traces? This cannot be undone.'))return;
+    deleteAllChats();
+  });
+  heading.appendChild(cleanBtn);
+  $adminContent.appendChild(heading);
+
   try{
     var r=await fetch(API+'/api/chats?user_id='+encodeURIComponent(getUser()));
     var chats=await r.json();
@@ -821,9 +1000,24 @@ async function loadAdmin(){
       var header=document.createElement('div');
       header.className='admin-card-header';
       header.innerHTML='<span class="arrow" id="'+cardId+'_a">&#9654;</span>'
-        +(hasFallback?'&#9888;':'&#9989;')+' '+esc(chat.title)
+        +(hasFallback?'&#9888;':'&#9989;')
+        +' <span class="session-id">'+esc(chat.thread_id)+'</span> '
+        +esc(chat.title)
         +' &mdash; '+(chat.updated_at||'').substring(0,16)
         +' &middot; '+chat.query_count+' queries &middot; '+(chat.total_tokens||0).toLocaleString()+' tok';
+
+      var delBtn=document.createElement('button');
+      delBtn.className='admin-del-btn';
+      delBtn.textContent='\u2715';
+      delBtn.title='Delete this chat';
+      (function(tid){
+        delBtn.addEventListener('click',function(e){
+          e.stopPropagation();
+          if(!confirm('Delete this chat and its traces?'))return;
+          deleteSingleChat(tid);
+        });
+      })(chat.thread_id);
+      header.appendChild(delBtn);
 
       var body=document.createElement('div');
       body.className='admin-card-body';
@@ -831,7 +1025,7 @@ async function loadAdmin(){
 
       var info=document.createElement('div');
       info.style.cssText='color:var(--text-faint);margin-bottom:6px';
-      info.innerHTML='Session: <code>'+esc(chat.thread_id)+'</code> &middot; User: '+esc(chat.user_id||'default');
+      info.innerHTML='User: '+esc(chat.user_id||'default');
       body.appendChild(info);
 
       if(chat.tags&&chat.tags.length){
@@ -897,7 +1091,8 @@ async function loadAdmin(){
       });
 
       (function(hdr,bdy,arrowId){
-        hdr.addEventListener('click',function(){
+        hdr.addEventListener('click',function(e){
+          if(e.target.classList.contains('admin-del-btn'))return;
           bdy.classList.toggle('open');
           var a=document.getElementById(arrowId);
           if(a) a.classList.toggle('open');
@@ -913,6 +1108,20 @@ async function loadAdmin(){
   }
 }
 
+async function deleteSingleChat(threadId){
+  await fetch(API+'/api/chats/'+threadId,{method:'DELETE'});
+  if(activeThread===threadId) startNewChat();
+  await loadChatList();
+  loadAdmin();
+}
+
+async function deleteAllChats(){
+  await fetch(API+'/api/chats',{method:'DELETE'});
+  startNewChat();
+  await loadChatList();
+  loadAdmin();
+}
+
 async function addTagAdmin(threadId,inpEl){
   var tag=inpEl.value.trim().toLowerCase();
   if(!tag)return;
@@ -926,6 +1135,186 @@ async function addTagAdmin(threadId,inpEl){
 async function removeTagAdmin(threadId,tag){
   await fetch(API+'/api/chats/'+threadId+'/tags/'+encodeURIComponent(tag),{method:'DELETE'});
   loadAdmin();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MEMORY INSIGHTS TAB
+   ══════════════════════════════════════════════════════════════════ */
+
+async function loadMemory(){
+  $memoryContent.innerHTML='<h3>Memory Insights <button class="mem-refresh" id="memRefreshBtn">Refresh</button></h3>';
+  document.getElementById('memRefreshBtn').addEventListener('click', loadMemory);
+
+  try{
+    var url=API+'/api/memory';
+    if(activeThread) url+='?session_id='+encodeURIComponent(activeThread);
+    var r=await fetch(url);
+    var data=await r.json();
+
+    var grid=document.createElement('div');
+    grid.className='memory-grid';
+    grid.appendChild(buildWorkingPanel(data.working));
+    grid.appendChild(buildEpisodicPanel(data.episodic));
+    grid.appendChild(buildSemanticPanel(data.semantic));
+    grid.appendChild(buildProceduralPanel(data.procedural));
+    $memoryContent.appendChild(grid);
+  }catch(e){
+    $memoryContent.innerHTML+='<div class="admin-empty">Failed to load memory data.</div>';
+  }
+}
+
+function buildWorkingPanel(w){
+  var panel=document.createElement('div');
+  panel.className='memory-panel';
+  var header=document.createElement('div');
+  header.className='mp-header';
+  header.innerHTML='<div class="mp-icon" style="background:var(--mt-working-bg);color:var(--mt-working-fg)">\u26A1</div>'
+    +'<div class="mp-info"><div class="mp-title">Working Memory</div><div class="mp-sub">Current session context</div></div>'
+    +'<div class="mp-kpi">'+(w.message_count||0)+' msg</div>';
+  panel.appendChild(header);
+
+  var body=document.createElement('div');
+  body.className='mp-body';
+  if(!w.message_count){
+    body.innerHTML='<div class="mp-empty">Start a chat to see working memory</div>';
+  } else {
+    body.innerHTML=
+      '<div class="mp-row"><span class="mp-label">User messages</span><span class="mp-val">'+w.user_msgs+'</span></div>'
+      +'<div class="mp-row"><span class="mp-label">Assistant messages</span><span class="mp-val">'+w.assistant_msgs+'</span></div>'
+      +'<div class="mp-row"><span class="mp-label">Tool messages</span><span class="mp-val">'+w.tool_msgs+'</span></div>'
+      +'<div class="mp-row"><span class="mp-label">Est. tokens</span><span class="mp-val">~'+(w.estimated_tokens||0).toLocaleString()+'</span></div>';
+  }
+  panel.appendChild(body);
+  return panel;
+}
+
+function buildEpisodicPanel(ep){
+  var panel=document.createElement('div');
+  panel.className='memory-panel';
+  var header=document.createElement('div');
+  header.className='mp-header';
+  header.innerHTML='<div class="mp-icon" style="background:var(--mt-episodic-bg);color:var(--mt-episodic-fg)">\uD83D\uDCC5</div>'
+    +'<div class="mp-info"><div class="mp-title">Episodic Memory</div><div class="mp-sub">Conversation history</div></div>'
+    +'<div class="mp-kpi">'+ep.total_sessions+' sessions</div>';
+  panel.appendChild(header);
+
+  var body=document.createElement('div');
+  body.className='mp-body';
+  body.innerHTML=
+    '<div class="mp-row"><span class="mp-label">Total messages</span><span class="mp-val">'+ep.total_messages+'</span></div>'
+    +'<div class="mp-row"><span class="mp-label">Avg depth</span><span class="mp-val">'+ep.avg_depth+' msg/session</span></div>';
+
+  if(ep.sessions&&ep.sessions.length){
+    var title=document.createElement('div');
+    title.className='mp-section-title';
+    title.textContent='Recent Sessions';
+    body.appendChild(title);
+
+    var list=document.createElement('div');
+    list.className='mp-list';
+    ep.sessions.slice(0,8).forEach(function(s){
+      var item=document.createElement('div');
+      item.className='mp-list-item';
+      item.innerHTML='<span class="li-title">'+esc(s.title)+'</span>'
+        +'<span class="li-meta">'+s.message_count+' msg &middot; '+(s.created_at||'').substring(0,10)+'</span>';
+      list.appendChild(item);
+    });
+    body.appendChild(list);
+  }
+  panel.appendChild(body);
+  return panel;
+}
+
+function buildSemanticPanel(sem){
+  var panel=document.createElement('div');
+  panel.className='memory-panel';
+  var header=document.createElement('div');
+  header.className='mp-header';
+  header.innerHTML='<div class="mp-icon" style="background:var(--mt-semantic-bg);color:var(--mt-semantic-fg)">\uD83E\uDDE9</div>'
+    +'<div class="mp-info"><div class="mp-title">Semantic Memory</div><div class="mp-sub">User profiles &amp; facts</div></div>'
+    +'<div class="mp-kpi">'+sem.total_facts+' facts</div>';
+  panel.appendChild(header);
+
+  var body=document.createElement('div');
+  body.className='mp-body';
+  if(!sem.profiles||!sem.profiles.length){
+    body.innerHTML='<div class="mp-empty">No user profiles yet. The agent remembers facts when you share them.</div>';
+  } else {
+    sem.profiles.forEach(function(p){
+      var uTitle=document.createElement('div');
+      uTitle.className='fact-user';
+      uTitle.textContent=p.user_id+' ('+p.fact_count+' fact'+(p.fact_count!==1?'s':'')+')';
+      body.appendChild(uTitle);
+      if(p.facts&&p.facts.length){
+        p.facts.forEach(function(f){
+          var fEl=document.createElement('div');
+          fEl.className='fact-item';
+          fEl.textContent=f;
+          body.appendChild(fEl);
+        });
+      }
+    });
+  }
+  panel.appendChild(body);
+  return panel;
+}
+
+function buildProceduralPanel(proc){
+  var panel=document.createElement('div');
+  panel.className='memory-panel';
+  var header=document.createElement('div');
+  header.className='mp-header';
+  header.innerHTML='<div class="mp-icon" style="background:var(--mt-procedural-bg);color:var(--mt-procedural-fg)">\u2699\uFE0F</div>'
+    +'<div class="mp-info"><div class="mp-title">Procedural Memory</div><div class="mp-sub">Tool usage &amp; patterns</div></div>'
+    +'<div class="mp-kpi">'+proc.total_tool_calls+' calls</div>';
+  panel.appendChild(header);
+
+  var body=document.createElement('div');
+  body.className='mp-body';
+  var usage=proc.tool_usage||{};
+  var toolNames=Object.keys(usage);
+  if(!toolNames.length){
+    body.innerHTML='<div class="mp-empty">No tool usage recorded yet.</div>';
+  } else {
+    var maxCount=Math.max.apply(null,toolNames.map(function(n){return usage[n]}));
+
+    var title1=document.createElement('div');
+    title1.className='mp-section-title';
+    title1.textContent='Tool Usage';
+    body.appendChild(title1);
+
+    toolNames.forEach(function(name){
+      var count=usage[name];
+      var row=document.createElement('div');
+      row.className='tool-bar-row';
+      row.innerHTML='<span class="tool-bar-name">'+esc(name)+'</span>'
+        +'<div class="tool-bar"><div class="tool-bar-fill" style="width:'+Math.round(count/maxCount*100)+'%"></div></div>'
+        +'<span class="tool-bar-count">'+count+'</span>';
+      body.appendChild(row);
+    });
+
+    var qtDist=proc.query_type_distribution||{};
+    var qtKeys=Object.keys(qtDist);
+    if(qtKeys.length){
+      var title2=document.createElement('div');
+      title2.className='mp-section-title';
+      title2.textContent='Query Types';
+      body.appendChild(title2);
+      var distRow=document.createElement('div');
+      distRow.className='qt-dist';
+      var totalQt=qtKeys.reduce(function(s,k){return s+qtDist[k]},0);
+      qtKeys.forEach(function(k){
+        var pct=totalQt?Math.round(qtDist[k]/totalQt*100):0;
+        var badge=document.createElement('span');
+        badge.className='qt-badge';
+        badge.textContent=k+': '+pct+'% ('+qtDist[k]+')';
+        distRow.appendChild(badge);
+      });
+      body.appendChild(distRow);
+    }
+  }
+  panel.appendChild(body);
+  return panel;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1001,18 +1390,13 @@ async function loadUsers(){
   try{
     var r=await fetch(API+'/api/users');
     var d=await r.json();
-    $userList.innerHTML='';
-    (d.users||[]).forEach(function(u){
-      var opt=document.createElement('option');
-      opt.value=u;
-      $userList.appendChild(opt);
-    });
-  }catch(e){}
+    allUsers=d.users||[];
+  }catch(e){allUsers=[];}
 }
 
+
 /* ══════════════════════════════════════════════════════════════════
-   INIT — everything wrapped in try/catch so one failure
-   does not kill the rest
+   INIT
    ══════════════════════════════════════════════════════════════════ */
 
 startNewChat();
