@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from src.config import get_llm, get_summarizer_model
 from src.data import CATEGORIES, CATEGORY_INTENT_MAP, INTENTS, dataset
 from src.memory import add_fact, get_facts
+from src.session_store import store
 from src.toon import to_toon
 
 # --- User ID injection (thread-safe + async-safe) ---
@@ -374,6 +375,92 @@ def recall_profile() -> str:
     return get_facts(get_current_user_id())
 
 
+# --- Tool 10: recall_past_sessions ---
+
+
+class RecallPastSessionsInput(BaseModel):
+    keyword: Optional[str] = Field(
+        None,
+        description="Optional keyword to filter sessions/queries "
+        "(e.g., 'intents', 'refund'). Only sessions containing "
+        "this keyword in their title or queries will be returned.",
+    )
+    query_type_filter: Optional[str] = Field(
+        None,
+        description="Filter by query type: 'structured', 'unstructured', "
+        "or 'recommend'. Use 'structured' to find past data/business "
+        "questions, skipping recommendation chats.",
+    )
+    limit: int = Field(
+        5,
+        description="Max number of past sessions to return (1-10)",
+        ge=1,
+        le=10,
+    )
+
+
+@tool(args_schema=RecallPastSessionsInput)
+def recall_past_sessions(
+    keyword: Optional[str] = None,
+    query_type_filter: Optional[str] = None,
+    limit: int = 5,
+) -> str:
+    """Retrieve summaries of the user's past chat sessions.
+
+    Use this when the user asks about their previous conversations,
+    wants to continue from where they left off, or asks what they
+    discussed before. Returns session IDs, titles, timestamps, and
+    the actual queries the user asked with tools that were used.
+    """
+    user_id = get_current_user_id()
+    user_chats = [
+        c for c in store.chats.values()
+        if c.user_id == user_id
+    ]
+    user_chats.sort(key=lambda c: c.updated_at, reverse=True)
+
+    if not user_chats:
+        return f"No past sessions found for user '{user_id}'."
+
+    kw = keyword.lower() if keyword else None
+    results = []
+    for chat in user_chats:
+        queries = list(chat.queries)
+        if query_type_filter:
+            queries = [q for q in queries if q.query_type == query_type_filter]
+        if kw:
+            title_match = kw in (chat.title or "").lower()
+            queries = [q for q in queries if kw in q.user_message.lower()] if not title_match else queries
+            if not queries and not title_match:
+                continue
+
+        if not queries and not chat.queries:
+            continue
+
+        lines = [f"Session {chat.thread_id} ({chat.updated_at[:16]}):"]
+        lines.append(f"  Title: \"{chat.title}\"")
+        display_queries = queries[:8] if queries else list(chat.queries)[:8]
+        for i, q in enumerate(display_queries, 1):
+            tools_used = [tc.get("name", "?") for tc in q.tool_calls]
+            tools_str = f" -> tools: {', '.join(tools_used)}" if tools_used else ""
+            lines.append(f"  {i}. [{q.query_type}] \"{q.user_message}\"{tools_str}")
+        results.append("\n".join(lines))
+
+        if len(results) >= limit:
+            break
+
+    if not results:
+        filter_desc = ""
+        if keyword:
+            filter_desc += f" matching '{keyword}'"
+        if query_type_filter:
+            filter_desc += f" of type '{query_type_filter}'"
+        return f"No past sessions found{filter_desc} for user '{user_id}'."
+
+    header = f"Past sessions for user '{user_id}' ({len(results)} found):\n\n"
+    return header + "\n\n".join(results)
+
+
 # --- Tool groups and dynamic exposure ---
 
 DATA_TOOL_NAMES = [
@@ -381,11 +468,12 @@ DATA_TOOL_NAMES = [
     "get_distribution", "get_examples", "search_instructions",
 ]
 ANALYSIS_TOOL_NAMES = DATA_TOOL_NAMES + ["summarize_responses"]
-MEMORY_TOOL_NAMES = ["remember_fact", "recall_profile"]
+MEMORY_TOOL_NAMES = ["remember_fact", "recall_profile", "recall_past_sessions"]
 
 TOOL_EXPOSURE_MAP: dict[str, list[str]] = {
     "structured": DATA_TOOL_NAMES + MEMORY_TOOL_NAMES,
     "unstructured": ANALYSIS_TOOL_NAMES + MEMORY_TOOL_NAMES,
+    "recommend": MEMORY_TOOL_NAMES,
     "out_of_scope": [],
 }
 
@@ -402,6 +490,7 @@ def get_all_tools() -> list:
         summarize_responses,
         remember_fact,
         recall_profile,
+        recall_past_sessions,
     ]
 
 

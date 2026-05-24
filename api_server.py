@@ -28,6 +28,7 @@ from src.config import AGENT_MODEL, CHECKPOINTS_DB, PROFILES_DIR
 from src.data import metadata
 from src.health import run_startup_checks
 from src.memory import load_profile
+from src.recommender import get_recommendations
 from src.session_store import QueryTrace, store
 from src.ui_helpers import suggest_tags
 
@@ -148,6 +149,7 @@ async def chat(request: Request):
     query = body.get("query", "")
     session_id = body.get("session_id") or str(uuid.uuid4())[:8]
     user_id = body.get("user_id") or "default"
+    use_past_sessions = body.get("use_past_sessions", False)
 
     store.get_or_create_chat(session_id, user_id)
     store.update_chat_title(session_id, query)
@@ -173,6 +175,8 @@ async def chat(request: Request):
                     {
                         "messages": [HumanMessage(content=query)],
                         "user_id": user_id,
+                        "use_past_sessions": use_past_sessions,
+                        "thread_id": session_id,
                     },
                     config=config,
                     stream_mode="updates",
@@ -594,6 +598,38 @@ def memory_insights(session_id: str | None = Query(default=None)):
         "semantic": semantic,
         "procedural": procedural,
     }
+
+
+# ---------------------------------------------------------------------------
+# API: Query Recommendations (auto chips)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/recommend")
+def recommend(
+    user_id: str = Query(default="default"),
+    session_id: str | None = Query(default=None),
+    use_past_sessions: bool = Query(default=False),
+):
+    """Generate query recommendations for auto suggestion chips."""
+    current_messages = []
+    if session_id:
+        try:
+            state = _get_state_safe(
+                {"configurable": {"thread_id": session_id}}
+            )
+            if state and state.values:
+                current_messages = state.values.get("messages", [])
+        except Exception:
+            pass
+
+    recs = get_recommendations(
+        user_id=user_id,
+        current_messages=current_messages,
+        current_thread_id=session_id,
+        use_past_sessions=use_past_sessions,
+    )
+    return {"recommendations": recs}
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ Query router — classifies user queries before agent tool selection.
 Uses a lightweight model (ROUTER_MODEL) to classify queries as:
 - structured: concrete data questions (counts, lists, distributions, examples)
 - unstructured: open-ended questions requiring summarization/analysis
+- recommend: user asking for query suggestions ("what should I query next?")
 - out_of_scope: questions unrelated to the customer service dataset
 """
 
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 class RouterOutput(BaseModel):
     """Structured output from the query router."""
 
-    classification: Literal["structured", "unstructured", "out_of_scope"] = Field(
+    classification: Literal["structured", "unstructured", "recommend", "out_of_scope"] = Field(
         description="The query type classification"
     )
     reasoning: str = Field(

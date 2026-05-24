@@ -254,6 +254,33 @@ def test_chat_session_detail(client):
 # --- Helpers ---
 
 
+@pytest.mark.slow
+def test_recommend_endpoint(client):
+    """Recommendation endpoint returns valid structure."""
+    resp = client.get("/api/recommend?user_id=test_rec_user")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "recommendations" in data
+    assert isinstance(data["recommendations"], list)
+
+
+@pytest.mark.slow
+def test_recommend_with_past_sessions(client):
+    """Recommendation with use_past_sessions flag."""
+    resp = client.get(
+        "/api/recommend?user_id=test_rec_user&use_past_sessions=true"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "recommendations" in data
+    for rec in data["recommendations"]:
+        assert "query" in rec
+        assert isinstance(rec["query"], str)
+
+
+# --- Helpers ---
+
+
 def _parse_sse(text: str) -> list[dict]:
     """Parse SSE text into list of {event, data} dicts."""
     events = []

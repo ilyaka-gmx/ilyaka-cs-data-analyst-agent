@@ -151,6 +151,13 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
 .chip{padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer;color:var(--text-dim);transition:.15s;box-shadow:var(--shadow)}
 .chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.chip.rec{border-color:#e9967a;color:#c0623a;background:rgba(233,150,122,.08)}
+.chip.rec:hover{border-color:#c0623a;color:#a04520;background:rgba(233,150,122,.18)}
+
+/* Recommendation toggles */
+.rec-toggles{padding:8px 16px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border)}
+.rec-toggle-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none}
+.rec-toggle-row input[type=checkbox]{accent-color:var(--accent);cursor:pointer}
 
 /* Welcome */
 .welcome{text-align:center;padding:48px 20px 24px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
@@ -281,6 +288,11 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
     </div>
     <div class="sb-panel" id="tagsPanel"></div>
   </div>
+
+  <div class="rec-toggles">
+    <label class="rec-toggle-row"><input type="checkbox" id="autoRecToggle" checked> Auto recommendations</label>
+    <label class="rec-toggle-row"><input type="checkbox" id="pastSessionsToggle"> Use past sessions</label>
+  </div>
 </div>
 
 <!-- ── MAIN ── -->
@@ -354,6 +366,8 @@ var allUsers = [];
 var activeTagFilter = null;
 var isSending = false;
 var currentThemeMode = 'system';
+var autoRecEnabled = localStorage.getItem('autoRec') !== 'false';
+var usePastSessions = localStorage.getItem('pastSessions') === 'true';
 
 /* ── DOM refs ── */
 var $messages   = document.getElementById('messages');
@@ -414,39 +428,74 @@ try{var savedTheme = localStorage.getItem('theme'); applyTheme(savedTheme || 'sy
 
 try{var savedUser=localStorage.getItem('userId');if(savedUser)$userId.value=savedUser}catch(e){}
 
+function selectUser(u){
+  $userId.value = u;
+  $userDropdown.classList.remove('open');
+  try{localStorage.setItem('userId', u)}catch(ex){}
+  activeTagFilter = null;
+  startNewChat();
+  loadChatList();
+}
+
 function renderUserDropdown(){
   $userDropdown.innerHTML='';
   var current = getUser();
-  allUsers.forEach(function(u){
+  var filter = ($userId.value||'').trim().toLowerCase();
+  var filtered = allUsers.filter(function(u){
+    return !filter || u.toLowerCase().indexOf(filter) >= 0;
+  });
+  if(!filtered.length && filter && allUsers.length){
+    var hint = document.createElement('div');
+    hint.className = 'user-dropdown-item';
+    hint.style.color = 'var(--text-faint)';
+    hint.textContent = 'Press Enter to create "' + filter + '"';
+    $userDropdown.appendChild(hint);
+    return;
+  }
+  filtered.forEach(function(u){
     var item = document.createElement('div');
     item.className = 'user-dropdown-item' + (u === current ? ' active' : '');
     item.textContent = u;
     item.addEventListener('mousedown', function(e){
       e.preventDefault();
-      $userId.value = u;
-      $userDropdown.classList.remove('open');
-      try{localStorage.setItem('userId', u)}catch(e){}
-      activeTagFilter = null;
-      startNewChat();
-      loadChatList();
+      e.stopPropagation();
+      selectUser(u);
     });
     $userDropdown.appendChild(item);
   });
 }
 
+var _usersLoaded = false;
 $userId.addEventListener('focus', function(){
-  renderUserDropdown();
-  $userDropdown.classList.add('open');
+  if(_usersLoaded && allUsers.length){
+    renderUserDropdown();
+    $userDropdown.classList.add('open');
+  } else {
+    loadUsers().then(function(){
+      _usersLoaded = true;
+      renderUserDropdown();
+      $userDropdown.classList.add('open');
+    });
+  }
 });
 $userId.addEventListener('blur', function(){
-  setTimeout(function(){$userDropdown.classList.remove('open')}, 150);
+  setTimeout(function(){$userDropdown.classList.remove('open')}, 200);
 });
-$userId.addEventListener('change', function(){
-  try{localStorage.setItem('userId', this.value)}catch(e){}
-  activeTagFilter = null;
-  startNewChat();
-  loadChatList();
-  loadUsers();
+$userId.addEventListener('input', function(){
+  renderUserDropdown();
+  if(allUsers.length) $userDropdown.classList.add('open');
+});
+$userId.addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){
+    $userDropdown.classList.remove('open');
+    $userId.blur();
+    try{localStorage.setItem('userId', $userId.value.trim())}catch(ex){}
+    activeTagFilter = null;
+    _usersLoaded = false;
+    startNewChat();
+    loadChatList();
+    loadUsers();
+  }
 });
 
 /* ══════════════════════════════════════════════════════════════════
@@ -478,6 +527,20 @@ document.getElementById('tagToggle').addEventListener('click',function(){
   arrow.classList.toggle('open');
   $tagsPanel.classList.toggle('open');
   if($tagsPanel.classList.contains('open')) renderTagPanel();
+});
+
+/* ── Recommendation toggles ── */
+var $autoRecToggle = document.getElementById('autoRecToggle');
+var $pastSessionsToggle = document.getElementById('pastSessionsToggle');
+$autoRecToggle.checked = autoRecEnabled;
+$pastSessionsToggle.checked = usePastSessions;
+$autoRecToggle.addEventListener('change', function(){
+  autoRecEnabled = this.checked;
+  localStorage.setItem('autoRec', autoRecEnabled);
+});
+$pastSessionsToggle.addEventListener('change', function(){
+  usePastSessions = this.checked;
+  localStorage.setItem('pastSessions', usePastSessions);
 });
 
 /* ── Export ── */
@@ -515,23 +578,52 @@ function showWelcome(){
   $messages.appendChild(w);
 }
 
-function showSuggestionChips(){
+function showSuggestionChips(recommendations){
   var old=document.getElementById('suggestionsRow');
   if(old)old.remove();
   var row=document.createElement('div');
   row.id='suggestionsRow';
   row.className='chips';
   row.style.padding='4px 0 8px';
-  var picks=SUGGESTIONS.slice(0,3);
-  picks.forEach(function(s){
-    var c=document.createElement('div');
-    c.className='chip';
-    c.textContent=s.label;
-    c.addEventListener('click',function(){$queryInput.value=s.query;sendQuery()});
-    row.appendChild(c);
-  });
+
+  if(recommendations && recommendations.length){
+    recommendations.forEach(function(r){
+      var c=document.createElement('div');
+      c.className='chip rec';
+      c.textContent=r.query.length>60 ? r.query.substring(0,57)+'...' : r.query;
+      if(r.reason) c.title=r.reason;
+      c.addEventListener('click',function(){$queryInput.value=r.query;sendQuery()});
+      row.appendChild(c);
+    });
+  } else {
+    var picks=SUGGESTIONS.slice(0,3);
+    picks.forEach(function(s){
+      var c=document.createElement('div');
+      c.className='chip';
+      c.textContent=s.label;
+      c.addEventListener('click',function(){$queryInput.value=s.query;sendQuery()});
+      row.appendChild(c);
+    });
+  }
+
   $messages.appendChild(row);
   scrollBottom();
+}
+
+async function fetchRecommendations(){
+  showSuggestionChips();
+  try{
+    var url=API+'/api/recommend?user_id='+encodeURIComponent(getUser())
+      +'&use_past_sessions='+usePastSessions;
+    if(activeThread) url+='&session_id='+encodeURIComponent(activeThread);
+    var resp=await fetch(url);
+    var data=await resp.json();
+    if(data.recommendations && data.recommendations.length){
+      showSuggestionChips(data.recommendations);
+    }
+  }catch(e){
+    console.warn('Recommendation fetch failed:',e);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -673,7 +765,11 @@ function renderLoadedMessages(queries){
       appendBotBubble(m.content, q?q.tool_calls:[], answerLike);
     }
   });
-  showSuggestionChips();
+  if(autoRecEnabled && chatMessages.length > 0){
+    fetchRecommendations();
+  } else {
+    showSuggestionChips();
+  }
   scrollBottom();
 }
 
@@ -713,7 +809,7 @@ async function sendQuery(){
     var resp=await fetch(API+'/api/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({query:q,session_id:activeThread,user_id:getUser()})
+      body:JSON.stringify({query:q,session_id:activeThread,user_id:getUser(),use_past_sessions:usePastSessions})
     });
 
     var reader=resp.body.getReader();
@@ -762,7 +858,11 @@ async function sendQuery(){
   $sendBtn.disabled=false;
   $queryInput.focus();
 
-  showSuggestionChips();
+  if(autoRecEnabled){
+    fetchRecommendations();
+  } else {
+    showSuggestionChips();
+  }
   await loadChatList();
   renderTagPanel();
   refreshMeta();
@@ -1391,6 +1491,12 @@ async function loadUsers(){
     var r=await fetch(API+'/api/users');
     var d=await r.json();
     allUsers=d.users||[];
+    var current=getUser();
+    if(current && current !== 'default' && allUsers.indexOf(current)<0){
+      allUsers.push(current);
+      allUsers.sort();
+    }
+    _usersLoaded = true;
   }catch(e){allUsers=[];}
 }
 

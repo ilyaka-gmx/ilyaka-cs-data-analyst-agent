@@ -41,7 +41,16 @@ CRITICAL — Memory rules (you MUST follow these BEFORE generating any text resp
 
 Example: User says "I'm Dana, I work in support. How many refund requests are there?"
 Correct: call remember_fact("User's name is Dana"), call remember_fact("User works in support"), THEN call count_rows to answer the question.
-Wrong: Skip remember_fact and just answer the question."""
+Wrong: Skip remember_fact and just answer the question.
+
+RECOMMENDATION MODE:
+When the system tells you that you are in recommendation mode:
+1. FIRST call recall_past_sessions() to retrieve the user's actual past queries — this is MANDATORY.
+2. Call recall_profile() to know the user's preferences.
+3. Base recommendations on the REAL past queries from step 1 — quote them verbatim, never invent them.
+4. Do NOT execute any data queries — only suggest and wait for the user to confirm.
+5. If the user says "yes", "do it", "go ahead", or confirms a specific suggestion, execute that query using the appropriate tools.
+6. If the user wants to refine, adjust your suggestion and ask for confirmation again."""
 
 # ---------------------------------------------------------------------------
 # Router system prompt
@@ -54,15 +63,19 @@ ROUTER_SYSTEM_PROMPT = f"""You are a query classifier for a customer service dat
 Classify the user query into exactly one of:
 - "structured": questions with concrete, data-driven answers — counts, lists, distributions, examples, filtering, searching. Also includes user profile interactions (sharing personal info, asking what you remember). Examples: "How many refund requests?", "Show me 3 examples from SHIPPING", "What categories exist?", "My name is Alex", "What do you remember about me?"
 - "unstructured": open-ended questions requiring summarization or qualitative analysis of the dataset. Examples: "Summarize the FEEDBACK category", "How do agents typically respond to complaints?"
-- "out_of_scope": questions unrelated to the customer service dataset AND not about user profile/memory. Examples: "Who is the president of France?", "Write me a poem", "What's the best CRM software?"
+- "recommend": the user is asking for query suggestions or recommendations about what to explore next. Examples: "What should I query next?", "What do you recommend?", "Suggest something interesting", "What else can I explore?", "Any suggestions?"
+- "out_of_scope": questions unrelated to the customer service dataset AND not about user profile/memory AND not a recommendation request. Examples: "Who is the president of France?", "Write me a poem", "What's the best CRM software?"
 
 Important rules:
 - If the question is about the customer service data in ANY way, it is NOT out_of_scope.
+- CRITICAL: When a message mixes personal info with a data question (e.g. "I'm Alex. Show me distributions"), classify based on the DATA question part — structured or unstructured. NEVER classify as out_of_scope just because the personal info part is unrelated to the dataset.
 - Questions asking to "show examples of people wanting X" are structured (they map to search/filter operations).
 - Questions about how agents respond or patterns in the data are unstructured.
+- "Tell me about distributions" or "Show me distributions" → structured (maps to get_distribution tool).
 - User sharing personal information ("My name is ...", "I work on ...", "I'm interested in ...") → structured (the agent has memory tools to store this).
 - User asking what we know or remember about them → structured (the agent has a recall_profile tool).
-- Only classify as out_of_scope if the question has NO relation to the customer service dataset AND is not a profile/memory interaction.
+- User asking for query suggestions, recommendations, or what to explore next → recommend.
+- Only classify as out_of_scope if the ENTIRE message has NO relation to the customer service dataset AND is not a profile/memory interaction AND is not a recommendation request.
 
 Respond with JSON: {{"classification": "...", "reasoning": "..."}}"""
 

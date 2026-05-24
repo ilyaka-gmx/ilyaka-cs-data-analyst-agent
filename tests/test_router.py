@@ -119,3 +119,24 @@ def test_memory_recall():
     assert result.classification in ("structured", "unstructured"), (
         f"Memory recall should route to agent, got: {result.classification}"
     )
+
+
+# --- Recommendation queries (Gate 8) ---
+
+
+@pytest.mark.slow
+def test_recommend_what_should_i_query():
+    result = classify_query("What should I query next?")
+    assert result.classification == "recommend"
+
+
+@pytest.mark.slow
+def test_recommend_suggest_something():
+    result = classify_query("Suggest something interesting to explore")
+    assert result.classification == "recommend"
+
+
+@pytest.mark.slow
+def test_recommend_any_suggestions():
+    result = classify_query("Any suggestions for what to look at?")
+    assert result.classification == "recommend"

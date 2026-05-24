@@ -50,9 +50,11 @@ log = logging.getLogger(__name__)
 class AgentState(MessagesState):
     """Extended state with routing, user context, and iteration tracking."""
 
-    query_type: Optional[Literal["structured", "unstructured", "out_of_scope"]] = None
+    query_type: Optional[Literal["structured", "unstructured", "recommend", "out_of_scope"]] = None
     user_id: str = "default"
     iteration_count: int = 0
+    use_past_sessions: bool = False
+    thread_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +129,27 @@ def agent_step(state: AgentState) -> dict:
         bound_llm = llm.bind_tools(exposed_tools)
         inject = []
 
-    sys_msg = SystemMessage(content=AGENT_SYSTEM_PROMPT)
+    sys_prompt = AGENT_SYSTEM_PROMPT
+    if query_type == "recommend" and iteration == 0:
+        log.info("Recommendation mode: user=%s", state.get("user_id", "default"))
+
+        sys_prompt += (
+            "\n\nYou are in RECOMMENDATION MODE.\n\n"
+            "MANDATORY FIRST STEPS — do these BEFORE generating any recommendations:\n"
+            "1. Call recall_past_sessions(query_type_filter='structured') to retrieve "
+            "the user's actual past business questions.\n"
+            "2. Call recall_profile() to retrieve the user's profile facts.\n\n"
+            "AFTER you have the tool results:\n"
+            "- Base your recommendations on the ACTUAL past queries returned by the tool.\n"
+            "- Quote the user's real past questions verbatim — NEVER make up questions.\n"
+            "- Suggest 2-3 follow-up queries that build on what they actually explored.\n"
+            "- Explain briefly why each suggestion is interesting.\n"
+            "- Ask which one they'd like to try, or if they want something different.\n"
+            "- Do NOT execute any data queries — only suggest and wait for confirmation.\n"
+            "- Do NOT say you have no access to past sessions — use recall_past_sessions."
+        )
+
+    sys_msg = SystemMessage(content=sys_prompt)
     trimmed = _trim_messages(list(messages), max_messages=30)
     invoke_messages = [sys_msg] + trimmed + inject
 
