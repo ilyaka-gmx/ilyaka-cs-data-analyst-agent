@@ -42,7 +42,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 
 /* ── SIDEBAR ── */
 .sidebar{width:280px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:background .2s,border-color .2s}
-.sb-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.sb-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.sb-header .admin-mode-btn{margin-left:auto;font-size:11px;padding:3px 8px}
 .sb-logo{width:28px;height:28px;background:var(--accent);border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
 .sb-header .title{font-size:14px;font-weight:600;flex:1}
 
@@ -75,13 +76,20 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .sb-chats{flex:1;overflow-y:auto;padding:4px 0}
 .sb-chats::-webkit-scrollbar{width:4px}
 .sb-chats::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:2px}
-.chat-item{padding:8px 16px;cursor:pointer;border-left:3px solid transparent;transition:.1s}
+.chat-item{padding:8px 16px;cursor:pointer;border-left:3px solid transparent;transition:.1s;position:relative}
 .chat-item:hover{background:var(--accent-bg)}
 .chat-item.active{border-left-color:var(--accent);background:var(--accent-bg)}
-.chat-item .ci-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item .ci-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:40px}
 .chat-item .ci-meta{font-size:11px;color:var(--text-faint);margin-top:2px}
 .chat-item .ci-tags{margin-top:2px}
 .ci-tag{display:inline-block;font-size:9px;padding:1px 5px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-right:2px}
+.ci-actions{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:none;gap:2px}
+.chat-item:hover .ci-actions{display:flex}
+.ci-act{padding:3px 5px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-faint);border-radius:3px;transition:.15s;line-height:1}
+.ci-act:hover{background:var(--raised);color:var(--text)}
+.ci-act.del:hover{color:var(--red)}
+.delete-all-user{display:block;padding:6px 16px;font-size:11px;color:var(--text-faint);cursor:pointer;transition:.15s;border:none;background:none;font-family:inherit;width:100%;text-align:left}
+.delete-all-user:hover{color:var(--red)}
 
 .sb-section{border-top:1px solid var(--border)}
 .sb-toggle{display:flex;align-items:center;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);user-select:none}
@@ -249,6 +257,30 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .fact-item{font-size:12px;color:var(--text-dim);margin:1px 0 1px 12px}
 .fact-item::before{content:'\2022';margin-right:6px;color:var(--accent)}
 .mp-empty{color:var(--text-faint);font-size:12px;font-style:italic}
+.mp-delete-row{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.mp-delete-row select{flex:1;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:11px}
+.mp-delete-row select:focus{outline:none;border-color:var(--accent)}
+.mp-delete-row button{padding:4px 10px;background:none;border:1px solid var(--border);border-radius:4px;font:inherit;font-size:11px;color:var(--text-faint);cursor:pointer;transition:.15s;white-space:nowrap}
+.mp-delete-row button:hover{border-color:var(--red);color:var(--red);background:rgba(220,38,38,.06)}
+
+/* Admin mode button */
+.admin-mode-btn{padding:5px 12px;background:none;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;color:var(--text-dim);cursor:pointer;transition:.15s;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.admin-mode-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.admin-mode-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* Admin sidebar stats */
+.sb-stats{padding:12px 16px;flex:1;overflow-y:auto}
+.stat-card{padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:var(--raised);transition:.2s}
+.stat-card .stat-label{font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px}
+.stat-card .stat-val{font-size:18px;font-weight:700;color:var(--accent);margin:2px 0}
+.stat-card .stat-detail{font-size:11px;color:var(--text-dim);line-height:1.4}
+.stat-card .stat-detail .su{margin:1px 0}
+
+/* Cleanup buttons row in admin */
+.admin-cleanup{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.admin-cleanup button{padding:5px 12px;font:inherit;font-size:11px;border-radius:4px;cursor:pointer;transition:.15s;border:1px solid var(--border);background:none;color:var(--text-dim)}
+.admin-cleanup button:hover{border-color:var(--red);color:var(--red);background:rgba(220,38,38,.06)}
+.admin-user-badge{display:inline-block;font-size:9px;padding:1px 6px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-left:6px;font-weight:600}
 
 @media(max-width:768px){.sidebar{display:none}.msg{max-width:92%}.memory-grid{grid-template-columns:1fr}}
 </style>
@@ -260,6 +292,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
   <div class="sb-header">
     <div class="sb-logo">CS</div>
     <span class="title">Data Analyst</span>
+    <button class="admin-mode-btn" id="adminModeBtn" title="Switch to Admin mode">&#9881; Admin</button>
   </div>
 
   <div class="sb-user">
@@ -289,18 +322,20 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
     <div class="sb-panel" id="tagsPanel"></div>
   </div>
 
-  <div class="rec-toggles">
+  <div class="rec-toggles" id="recToggles">
     <label class="rec-toggle-row"><input type="checkbox" id="autoRecToggle" checked> Auto recommendations</label>
     <label class="rec-toggle-row"><input type="checkbox" id="pastSessionsToggle"> Use past sessions</label>
   </div>
+
+  <div class="sb-stats" id="adminSidebar" style="display:none"></div>
 </div>
 
 <!-- ── MAIN ── -->
 <div class="main">
   <div class="tab-bar">
-    <button class="tab-btn active" data-tab="chat">Chat</button>
-    <button class="tab-btn" data-tab="admin">Admin</button>
-    <button class="tab-btn" data-tab="memory">Memory Insights</button>
+    <button class="tab-btn active" data-tab="chat" id="tabChat">Chat</button>
+    <button class="tab-btn" data-tab="admin" id="tabAdmin" style="display:none">Chat Tracing</button>
+    <button class="tab-btn" data-tab="memory" id="tabMemory" style="display:none">Memory Insights</button>
     <div class="tab-bar-right">
       <button class="tab-action" id="exportBtn" title="Export conversation as Markdown">Export &#8595;</button>
       <div class="theme-seg" id="themeSeg">
@@ -437,10 +472,10 @@ function selectUser(u){
   loadChatList();
 }
 
-function renderUserDropdown(){
+function renderUserDropdown(showAll){
   $userDropdown.innerHTML='';
   var current = getUser();
-  var filter = ($userId.value||'').trim().toLowerCase();
+  var filter = showAll ? '' : ($userId.value||'').trim().toLowerCase();
   var filtered = allUsers.filter(function(u){
     return !filter || u.toLowerCase().indexOf(filter) >= 0;
   });
@@ -468,12 +503,12 @@ function renderUserDropdown(){
 var _usersLoaded = false;
 $userId.addEventListener('focus', function(){
   if(_usersLoaded && allUsers.length){
-    renderUserDropdown();
+    renderUserDropdown(true);
     $userDropdown.classList.add('open');
   } else {
     loadUsers().then(function(){
       _usersLoaded = true;
-      renderUserDropdown();
+      renderUserDropdown(true);
       $userDropdown.classList.add('open');
     });
   }
@@ -499,8 +534,56 @@ $userId.addEventListener('keydown', function(e){
 });
 
 /* ══════════════════════════════════════════════════════════════════
-   TAB SWITCHING
+   MODE & TAB SWITCHING
    ══════════════════════════════════════════════════════════════════ */
+
+var isAdminMode = false;
+var $tabChat = document.getElementById('tabChat');
+var $tabAdmin = document.getElementById('tabAdmin');
+var $tabMemory = document.getElementById('tabMemory');
+var $adminModeBtn = document.getElementById('adminModeBtn');
+var $adminSidebar = document.getElementById('adminSidebar');
+var $sbUser = document.querySelector('.sb-user');
+var $sbActions = document.querySelector('.sb-actions');
+var $sbSearch = document.querySelector('.sb-search');
+var $sbChats = document.getElementById('chatList');
+var $sbSections = document.querySelectorAll('.sb-section');
+var $recToggles = document.getElementById('recToggles');
+
+function setMode(admin){
+  isAdminMode = admin;
+  $tabChat.style.display = admin ? 'none' : '';
+  $tabAdmin.style.display = admin ? '' : 'none';
+  $tabMemory.style.display = admin ? '' : 'none';
+  $adminModeBtn.textContent = admin ? '\u2190 Back to Chat' : '\u2699 Admin';
+  $adminModeBtn.classList.toggle('active', admin);
+
+  $sbUser.style.display = admin ? 'none' : '';
+  $sbActions.style.display = admin ? 'none' : '';
+  $sbSearch.style.display = admin ? 'none' : '';
+  $sbChats.style.display = admin ? 'none' : '';
+  $tagFilter.style.display = admin ? 'none' : '';
+  $sbSections.forEach(function(s){s.style.display = admin ? 'none' : ''});
+  $recToggles.style.display = admin ? 'none' : '';
+  $adminSidebar.style.display = admin ? '' : 'none';
+
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+  document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active')});
+
+  if(admin){
+    $tabAdmin.classList.add('active');
+    document.getElementById('adminTab').classList.add('active');
+    $exportBtn.style.display = 'none';
+    loadAdmin();
+    loadAdminSidebar();
+  } else {
+    $tabChat.classList.add('active');
+    document.getElementById('chatTab').classList.add('active');
+    $exportBtn.style.display = '';
+  }
+}
+
+$adminModeBtn.addEventListener('click', function(){ setMode(!isAdminMode) });
 
 function updateExportVisibility(tab){
   $exportBtn.style.display = (tab === 'chat') ? '' : 'none';
@@ -673,6 +756,23 @@ function renderChatList(){
     title.className='ci-title';
     title.textContent=(c.thread_id===activeThread?'\u25B6 ':'')+c.title;
     item.appendChild(title);
+
+    var actions=document.createElement('div');
+    actions.className='ci-actions';
+    var expBtn=document.createElement('button');
+    expBtn.className='ci-act';
+    expBtn.title='Export this chat';
+    expBtn.textContent='\u2913';
+    (function(tid,ttl){expBtn.addEventListener('click',function(e){e.stopPropagation();exportSingleChat(tid,ttl)})})(c.thread_id,c.title);
+    actions.appendChild(expBtn);
+    var delBtn=document.createElement('button');
+    delBtn.className='ci-act del';
+    delBtn.title='Delete this chat';
+    delBtn.textContent='\u2715';
+    (function(tid){delBtn.addEventListener('click',function(e){e.stopPropagation();if(confirm('Delete this chat?'))deleteSingleChat(tid)})})(c.thread_id);
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+
     if(c.tags&&c.tags.length){
       var tagsEl=document.createElement('div');
       tagsEl.className='ci-tags';
@@ -691,6 +791,36 @@ function renderChatList(){
     item.addEventListener('click',function(){switchToChat(c.thread_id)});
     $chatList.appendChild(item);
   });
+
+  if(filtered.length > 1){
+    var delAll=document.createElement('button');
+    delAll.className='delete-all-user';
+    delAll.textContent='\u2715 Delete all my chats';
+    delAll.addEventListener('click',function(){
+      if(!confirm('Delete all your chats? This cannot be undone.'))return;
+      deleteUserChats();
+    });
+    $chatList.appendChild(delAll);
+  }
+}
+
+async function exportSingleChat(threadId,title){
+  try{
+    var r=await fetch(API+'/api/chats/'+threadId);
+    var data=await r.json();
+    var lines=['# '+esc(title||'Chat Export')+'\n'];
+    (data.messages||[]).forEach(function(m){
+      lines.push((m.role==='user'?'**User**: ':'**Agent**: ')+m.content+'\n');
+    });
+    var blob=new Blob([lines.join('\n')],{type:'text/markdown'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(title||'chat').replace(/[^a-z0-9]/gi,'_')+'.md';a.click();
+  }catch(e){alert('Export failed.')}
+}
+
+async function deleteUserChats(){
+  await fetch(API+'/api/chats?user_id='+encodeURIComponent(getUser()),{method:'DELETE'});
+  startNewChat();
+  await loadChatList();
 }
 
 $search.addEventListener('input',renderChatList);
@@ -701,7 +831,7 @@ $search.addEventListener('input',renderChatList);
 
 async function loadAllTags(){
   try{
-    var r=await fetch(API+'/api/tags');
+    var r=await fetch(API+'/api/tags?user_id='+encodeURIComponent(getUser()));
     var d=await r.json();
     allTags=d.tags||[];
   }catch(e){allTags=[];}
@@ -1067,20 +1197,22 @@ async function loadAdmin(){
   $adminContent.innerHTML='';
   var heading=document.createElement('div');
   heading.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:12px';
-  heading.innerHTML='<h3 style="margin:0;font-size:16px;font-weight:600">Session Traces</h3>';
-  var cleanBtn=document.createElement('button');
-  cleanBtn.className='tab-action';
-  cleanBtn.textContent='Clean All History';
-  cleanBtn.style.cssText='color:var(--red);border-color:var(--red)';
-  cleanBtn.addEventListener('click',function(){
-    if(!confirm('Delete ALL chat history and traces? This cannot be undone.'))return;
-    deleteAllChats();
-  });
-  heading.appendChild(cleanBtn);
+  heading.innerHTML='<h3 style="margin:0;font-size:16px;font-weight:600">Chat Tracing</h3>';
   $adminContent.appendChild(heading);
 
+  var cleanup=document.createElement('div');
+  cleanup.className='admin-cleanup';
+  var btnCleanAll=document.createElement('button');
+  btnCleanAll.textContent='\u2715 Clean All Chats';
+  btnCleanAll.addEventListener('click',function(){
+    if(!confirm('Delete ALL chat sessions and checkpoint data? User profiles will be preserved. This cannot be undone.'))return;
+    deleteAllChats();
+  });
+  cleanup.appendChild(btnCleanAll);
+  $adminContent.appendChild(cleanup);
+
   try{
-    var r=await fetch(API+'/api/chats?user_id='+encodeURIComponent(getUser()));
+    var r=await fetch(API+'/api/chats?all_users=true');
     var chats=await r.json();
     if(!chats.length){
       $adminContent.innerHTML+='<div class="admin-empty">No sessions recorded yet. Start a conversation in the Chat tab.</div>';
@@ -1102,6 +1234,7 @@ async function loadAdmin(){
       header.innerHTML='<span class="arrow" id="'+cardId+'_a">&#9654;</span>'
         +(hasFallback?'&#9888;':'&#9989;')
         +' <span class="session-id">'+esc(chat.thread_id)+'</span> '
+        +'<span class="admin-user-badge">'+esc(chat.user_id||'default')+'</span> '
         +esc(chat.title)
         +' &mdash; '+(chat.updated_at||'').substring(0,16)
         +' &middot; '+chat.query_count+' queries &middot; '+(chat.total_tokens||0).toLocaleString()+' tok';
@@ -1213,13 +1346,74 @@ async function deleteSingleChat(threadId){
   if(activeThread===threadId) startNewChat();
   await loadChatList();
   loadAdmin();
+  loadAdminSidebar();
 }
 
 async function deleteAllChats(){
   await fetch(API+'/api/chats',{method:'DELETE'});
   startNewChat();
   await loadChatList();
+  if(isAdminMode){loadAdmin();loadAdminSidebar();}
+}
+
+async function loadAdminSidebar(){
+  try{
+    var r=await fetch(API+'/api/admin/stats');
+    var d=await r.json();
+    $adminSidebar.innerHTML='';
+
+    var c1=document.createElement('div');c1.className='stat-card';
+    c1.innerHTML='<div class="stat-label">Users</div><div class="stat-val">'+d.total_users+'</div>'
+      +'<div class="stat-detail">'+d.users.join(', ')+'</div>';
+    $adminSidebar.appendChild(c1);
+
+    var c2=document.createElement('div');c2.className='stat-card';
+    c2.innerHTML='<div class="stat-label">Sessions</div><div class="stat-val">'+d.total_sessions+'</div>';
+    var perUser=d.sessions_per_user||{};
+    var puKeys=Object.keys(perUser);
+    if(puKeys.length){
+      var detail=document.createElement('div');detail.className='stat-detail';
+      puKeys.forEach(function(u){
+        var su=document.createElement('div');su.className='su';
+        su.textContent=u+': '+perUser[u]+' session'+(perUser[u]!==1?'s':'');
+        detail.appendChild(su);
+      });
+      c2.appendChild(detail);
+    }
+    $adminSidebar.appendChild(c2);
+
+    var c3=document.createElement('div');c3.className='stat-card';
+    c3.innerHTML='<div class="stat-label">Profiles</div><div class="stat-val">'+d.total_profiles+'</div>'
+      +'<div class="stat-detail">'+d.total_facts+' fact'+(d.total_facts!==1?'s':'')+' stored</div>';
+    $adminSidebar.appendChild(c3);
+
+    var c4=document.createElement('div');c4.className='stat-card';
+    c4.innerHTML='<div class="stat-label">Queries</div><div class="stat-val">'+d.total_queries+'</div>';
+    $adminSidebar.appendChild(c4);
+  }catch(e){
+    $adminSidebar.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text-faint)">Stats unavailable</div>';
+  }
+}
+
+async function deleteUser(userId){
+  await fetch(API+'/api/users/'+encodeURIComponent(userId),{method:'DELETE'});
+  await loadChatList();
   loadAdmin();
+  loadAdminSidebar();
+  loadMemory();
+  loadUsers();
+  _usersLoaded=false;
+}
+
+async function deleteAllUsers(){
+  await fetch(API+'/api/users',{method:'DELETE'});
+  startNewChat();
+  await loadChatList();
+  loadAdmin();
+  loadAdminSidebar();
+  loadMemory();
+  loadUsers();
+  _usersLoaded=false;
 }
 
 async function addTagAdmin(threadId,inpEl){
@@ -1294,7 +1488,7 @@ function buildEpisodicPanel(ep){
   var header=document.createElement('div');
   header.className='mp-header';
   header.innerHTML='<div class="mp-icon" style="background:var(--mt-episodic-bg);color:var(--mt-episodic-fg)">\uD83D\uDCC5</div>'
-    +'<div class="mp-info"><div class="mp-title">Episodic Memory</div><div class="mp-sub">Conversation history</div></div>'
+    +'<div class="mp-info"><div class="mp-title">Conversation Records</div><div class="mp-sub">Chat history across all users</div></div>'
     +'<div class="mp-kpi">'+ep.total_sessions+' sessions</div>';
   panel.appendChild(header);
 
@@ -1331,7 +1525,7 @@ function buildSemanticPanel(sem){
   var header=document.createElement('div');
   header.className='mp-header';
   header.innerHTML='<div class="mp-icon" style="background:var(--mt-semantic-bg);color:var(--mt-semantic-fg)">\uD83E\uDDE9</div>'
-    +'<div class="mp-info"><div class="mp-title">Semantic Memory</div><div class="mp-sub">User profiles &amp; facts</div></div>'
+    +'<div class="mp-info"><div class="mp-title">User Profiles</div><div class="mp-sub">Stored facts &amp; preferences</div></div>'
     +'<div class="mp-kpi">'+sem.total_facts+' facts</div>';
   panel.appendChild(header);
 
@@ -1355,6 +1549,39 @@ function buildSemanticPanel(sem){
       }
     });
   }
+
+  if(isAdminMode){
+    var delRow=document.createElement('div');
+    delRow.className='mp-delete-row';
+    var sel=document.createElement('select');
+    sel.innerHTML='<option value="">Select user to delete...</option><option value="__all__">All users</option>';
+    var knownUsers=new Set();
+    (sem.profiles||[]).forEach(function(p){knownUsers.add(p.user_id)});
+    allUsers.forEach(function(u){knownUsers.add(u)});
+    Array.from(knownUsers).sort().forEach(function(uid){
+      var opt=document.createElement('option');
+      opt.value=uid;
+      opt.textContent=uid;
+      sel.appendChild(opt);
+    });
+    var delBtn=document.createElement('button');
+    delBtn.textContent='\u2715 Delete';
+    delBtn.addEventListener('click',function(){
+      var uid=sel.value;
+      if(!uid){alert('Select a user first.');return}
+      if(uid==='__all__'){
+        if(!confirm('Delete ALL users?\n\nThis will remove:\n- All profiles and stored facts\n- All chat sessions\n- All checkpoint data\n\nThis cannot be undone.'))return;
+        deleteAllUsers();
+      } else {
+        if(!confirm('Delete user "'+uid+'"?\n\nThis will remove:\n- Their profile and stored facts\n- All their chat sessions\n- All checkpoint data\n\nThis cannot be undone.'))return;
+        deleteUser(uid);
+      }
+    });
+    delRow.appendChild(sel);
+    delRow.appendChild(delBtn);
+    body.appendChild(delRow);
+  }
+
   panel.appendChild(body);
   return panel;
 }

@@ -123,6 +123,14 @@ class SessionStore:
             tags.update(chat.tags)
         return sorted(tags)
 
+    def get_tags_for_user(self, user_id: str) -> list[str]:
+        """Return unique tags from chats belonging to a specific user."""
+        tags: set[str] = set()
+        for chat in self.chats.values():
+            if chat.user_id == user_id:
+                tags.update(chat.tags)
+        return sorted(tags)
+
     def log_query(self, thread_id: str, trace: QueryTrace):
         """Log a completed query trace."""
         chat = self.chats.get(thread_id)
@@ -144,6 +152,17 @@ class SessionStore:
     def delete_all_chats(self):
         self.chats.clear()
         self._save()
+
+    def delete_user_chats(self, user_id: str) -> list[str]:
+        """Delete all chats for a specific user. Returns deleted thread IDs."""
+        to_delete = [
+            tid for tid, c in self.chats.items() if c.user_id == user_id
+        ]
+        for tid in to_delete:
+            del self.chats[tid]
+        if to_delete:
+            self._save()
+        return to_delete
 
     def list_chats(
         self,

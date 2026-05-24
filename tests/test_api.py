@@ -3,19 +3,50 @@ Tests for the FastAPI backend (api_server.py).
 
 Uses FastAPI's TestClient for synchronous endpoint testing.
 SSE streaming tests parse the event stream line by line.
+
+IMPORTANT: Tests use isolated temp files for checkpoints.db and
+session_store.json so they never touch production data.
 """
 
 import json
+import sqlite3
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.sqlite import SqliteSaver
 
+import api_server
 from api_server import app
+from src.session_store import SessionStore
 
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+def client(tmp_path):
+    orig_conn = api_server._conn
+    orig_checkpointer = api_server._checkpointer
+    orig_graph = api_server._graph
+    orig_store = api_server.store
+
+    test_db = tmp_path / "test_checkpoints.db"
+    test_conn = sqlite3.connect(str(test_db), check_same_thread=False)
+    test_checkpointer = SqliteSaver(test_conn)
+    test_graph = api_server.build_graph(checkpointer=test_checkpointer)
+    test_store = SessionStore(path=tmp_path / "test_session_store.json")
+
+    api_server._conn = test_conn
+    api_server._checkpointer = test_checkpointer
+    api_server._graph = test_graph
+    api_server.store = test_store
+
+    try:
+        yield TestClient(app)
+    finally:
+        api_server._conn = orig_conn
+        api_server._checkpointer = orig_checkpointer
+        api_server._graph = orig_graph
+        api_server.store = orig_store
+        test_conn.close()
 
 
 # --- Health ---

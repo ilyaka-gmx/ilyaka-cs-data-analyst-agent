@@ -343,12 +343,14 @@ def list_chats(
     user_id: str = Query(default="default"),
     tag: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    all_users: bool = Query(default=False),
 ):
     chats = store.list_chats(
         tag_filter=[tag] if tag else None,
         search=search,
     )
-    filtered = [c for c in chats if c.user_id == user_id]
+    if not all_users:
+        chats = [c for c in chats if c.user_id == user_id]
     return [
         {
             "thread_id": c.thread_id,
@@ -360,7 +362,7 @@ def list_chats(
             "query_count": c.query_count,
             "user_id": c.user_id,
         }
-        for c in filtered
+        for c in chats
     ]
 
 
@@ -436,7 +438,23 @@ def delete_chat(thread_id: str):
 
 
 @app.delete("/api/chats")
-def delete_all_chats():
+def delete_all_chats(user_id: str | None = Query(default=None)):
+    if user_id:
+        deleted_ids = store.delete_user_chats(user_id)
+        try:
+            with _graph_lock:
+                for tid in deleted_ids:
+                    _conn.execute(
+                        "DELETE FROM checkpoints WHERE thread_id = ?", (tid,)
+                    )
+                    _conn.execute(
+                        "DELETE FROM writes WHERE thread_id = ?", (tid,)
+                    )
+                _conn.commit()
+        except Exception:
+            pass
+        return {"ok": True, "deleted": len(deleted_ids)}
+
     store.delete_all_chats()
     try:
         with _graph_lock:
@@ -445,9 +463,43 @@ def delete_all_chats():
             _conn.commit()
     except Exception:
         pass
-    for p in PROFILES_DIR.glob("*.json"):
-        p.unlink(missing_ok=True)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# API: Admin stats (system overview for admin sidebar)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/admin/stats")
+def admin_stats():
+    user_ids: set[str] = set()
+    sessions_per_user: dict[str, int] = {}
+    for chat in store.chats.values():
+        uid = chat.user_id
+        user_ids.add(uid)
+        sessions_per_user[uid] = sessions_per_user.get(uid, 0) + 1
+
+    for p in PROFILES_DIR.glob("*.json"):
+        user_ids.add(p.stem)
+
+    profile_count = sum(1 for _ in PROFILES_DIR.glob("*.json"))
+    total_facts = 0
+    for p in PROFILES_DIR.glob("*.json"):
+        profile = load_profile(p.stem)
+        total_facts += len(profile.facts)
+
+    total_queries = sum(c.query_count for c in store.chats.values())
+
+    return {
+        "total_users": len(user_ids),
+        "users": sorted(user_ids),
+        "total_sessions": len(store.chats),
+        "sessions_per_user": sessions_per_user,
+        "total_profiles": profile_count,
+        "total_facts": total_facts,
+        "total_queries": total_queries,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +508,9 @@ def delete_all_chats():
 
 
 @app.get("/api/tags")
-def all_tags():
+def all_tags(user_id: str | None = Query(default=None)):
+    if user_id:
+        return {"tags": store.get_tags_for_user(user_id)}
     return {"tags": store.get_all_tags()}
 
 
@@ -503,6 +557,50 @@ def list_users():
     for p in PROFILES_DIR.glob("*.json"):
         user_ids.add(p.stem)
     return {"users": sorted(user_ids)}
+
+
+@app.delete("/api/users")
+def delete_all_users():
+    """Delete ALL users: profiles, chats, and checkpoint data."""
+    store.delete_all_chats()
+    try:
+        with _graph_lock:
+            _conn.execute("DELETE FROM checkpoints")
+            _conn.execute("DELETE FROM writes")
+            _conn.commit()
+    except Exception:
+        pass
+    profile_count = 0
+    for p in PROFILES_DIR.glob("*.json"):
+        p.unlink(missing_ok=True)
+        profile_count += 1
+    return {"ok": True, "profiles_deleted": profile_count}
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: str):
+    """Delete a user: their profile, all chats, and checkpoint data."""
+    deleted_chats = store.delete_user_chats(user_id)
+    try:
+        with _graph_lock:
+            for tid in deleted_chats:
+                _conn.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = ?", (tid,)
+                )
+                _conn.execute(
+                    "DELETE FROM writes WHERE thread_id = ?", (tid,)
+                )
+            _conn.commit()
+    except Exception:
+        pass
+    profile_path = PROFILES_DIR / f"{user_id}.json"
+    if profile_path.exists():
+        profile_path.unlink(missing_ok=True)
+    return {
+        "ok": True,
+        "deleted_chats": len(deleted_chats),
+        "profile_deleted": not profile_path.exists(),
+    }
 
 
 # ---------------------------------------------------------------------------
