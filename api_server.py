@@ -290,6 +290,7 @@ async def chat(request: Request):
             total_duration_ms=int(duration * 1000),
             hit_fallback="wasn't able to complete" in final_answer.lower(),
             final_response_preview=final_answer[:200],
+            final_response=final_answer,
             memory_ops=memory_ops,
         )
         store.log_query(session_id, trace)
@@ -386,6 +387,13 @@ def get_chat(thread_id: str):
                     )
     except Exception:
         pass
+
+    if not messages and chat.queries:
+        for q in chat.queries:
+            messages.append({"role": "user", "content": q.user_message})
+            resp = q.final_response or q.final_response_preview
+            if resp:
+                messages.append({"role": "assistant", "content": resp})
 
     return {
         "thread_id": chat.thread_id,

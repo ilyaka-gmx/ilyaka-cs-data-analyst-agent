@@ -33,6 +33,7 @@ class QueryTrace:
     total_duration_ms: int = 0
     hit_fallback: bool = False
     final_response_preview: str = ""
+    final_response: str = ""
     memory_ops: dict = field(default_factory=dict)
 
 
