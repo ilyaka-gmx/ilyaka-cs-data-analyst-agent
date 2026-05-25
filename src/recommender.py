@@ -31,7 +31,6 @@ Suggest 2-3 follow-up queries the user might find valuable. Prioritize:
 1. MOST IMPORTANT: If past session summaries are provided, base your recommendations primarily on what the user explored before — suggest deeper dives, comparisons, or extensions of their past queries. Explicitly reference what they did before in the "reason" field.
 2. Natural follow-ups to what they just asked about in the current conversation
 3. Areas of the dataset they haven't explored yet
-4. Queries that match their stated interests (from profile)
 
 Respond with JSON:
 {{"recommendations": [
@@ -40,10 +39,11 @@ Respond with JSON:
 ]}}
 
 Rules:
-- Queries must be answerable by the dataset (structured or unstructured).
+- Queries MUST be answerable by the dataset. The dataset has ONLY these columns: category, intent, instruction (customer text), response (agent text). It has NO location, date, customer name, sentiment, priority, or satisfaction data. NEVER suggest queries that filter by information not in the dataset.
+- The user profile (name, location, etc.) is for personalization context ONLY — do NOT inject profile facts into query suggestions. "Show feedback from Herzliya" is WRONG because the dataset has no location column.
 - Be specific: "Show 5 examples from REFUND" not "explore more data".
 - If past sessions mention specific queries/tools/categories, build on those topics.
-- If there's no conversation yet and no past sessions, suggest good starting queries based on the profile or dataset overview.
+- If there's no conversation yet and no past sessions, suggest good starting queries based on the dataset categories.
 - Do NOT suggest queries the user already asked in this session.
 - Keep each "reason" under 30 words. Keep each "query" under 20 words.
 - Respond ONLY with the JSON object — no markdown fences, no extra text."""
