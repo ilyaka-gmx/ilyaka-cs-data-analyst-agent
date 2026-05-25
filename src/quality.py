@@ -49,22 +49,35 @@ class QualityScore:
 
 
 JUDGE_PROMPT = """\
-You are a quality evaluator for a customer service dataset analyst.
+You are a strict quality evaluator for a customer service dataset analyst.
 
 The analyst was asked a question, used tools, and provided a response. \
-Evaluate the response quality.
+Evaluate the response quality with careful attention to semantic accuracy.
 
 User question: {user_query}
-Tools used: {tool_details}
+Tools used and their results: {tool_details}
 Analyst response: {agent_response}
 
 Score 1-5 on each dimension:
-- data_grounded: Does the answer cite specific data from tool results? \
-(1=pure general knowledge, 5=all claims backed by tool data)
-- addresses_question: Does it actually answer what was asked? \
-(1=completely off-topic, 5=directly answers the question)
+- data_grounded: Does the answer ACCURATELY represent the tool results? \
+Check carefully: if the analyst labels data differently from how the tool \
+returned it (e.g., calling "review" intent examples "positive feedback" \
+when the data has no sentiment), that is a misrepresentation — score LOW. \
+(1=fabricated/misrepresented data, 3=mostly accurate with minor liberties, \
+5=all claims faithfully match tool output)
+- addresses_question: Does it actually answer what was asked? If the dataset \
+lacks the information needed to answer (e.g., no sentiment labels), did the \
+analyst acknowledge this limitation? Silently substituting different data \
+without disclosure scores LOW. \
+(1=completely off-topic or silently substituted, 5=directly answers or \
+honestly explains what the dataset cannot provide)
 - conciseness: Is it appropriately brief? \
 (1=extremely verbose/off-track, 5=concise and focused)
+
+IMPORTANT: Read the tool results carefully. Compare the actual data labels \
+and content against how the analyst characterizes them in the response. \
+Relabeling data to match the user's question without disclosure is a \
+grounding failure.
 
 If any score is below 3, explain the issue briefly in the "issue" field.
 
@@ -91,14 +104,14 @@ def score_response(
     tool_lines = []
     for tc in tool_calls:
         name = tc.get("name", "?")
-        result = str(tc.get("result", ""))[:150]
+        result = str(tc.get("result", ""))[:300]
         tool_lines.append(f"  {name}: {result}")
     tool_details = "\n".join(tool_lines) or "  (no tools used)"
 
     prompt = JUDGE_PROMPT.format(
         user_query=user_query,
         agent_response=agent_response[:1000],
-        tool_details=tool_details[:500],
+        tool_details=tool_details[:800],
     )
 
     judge_llm = get_llm(JUDGE_MODEL, temperature=0, max_tokens=150)
