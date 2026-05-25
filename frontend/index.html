@@ -282,32 +282,24 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .admin-cleanup button:hover{border-color:var(--red);color:var(--red);background:rgba(220,38,38,.06)}
 .admin-user-badge{display:inline-block;font-size:9px;padding:1px 6px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-left:6px;font-weight:600}
 
-/* Judge card (side panel next to bot message) */
-.msg-with-judge{display:flex;align-items:flex-start;gap:8px;align-self:flex-start;max-width:640px;position:relative}
+/* Judge card (always visible, right of bot message) */
+.msg-with-judge{display:flex;align-items:flex-start;gap:8px;align-self:flex-start;max-width:850px}
 .msg-with-judge .msg.bot{flex:1;min-width:0;max-width:none}
-.judge-card{padding:6px;border-radius:8px;background:var(--surface);border:1px solid #d4a574;cursor:pointer;transition:all .2s;box-shadow:var(--shadow);flex-shrink:0;align-self:flex-start;overflow:hidden}
+.judge-card{width:170px;flex-shrink:0;padding:8px 10px;border-radius:8px;background:var(--surface);border:1px solid #d4a574;box-shadow:var(--shadow);align-self:flex-start;font-size:11px}
 [data-theme="dark"] .judge-card{border-color:#8b6914}
-.judge-card.collapsed{width:36px;height:auto}
-.judge-card.collapsed .judge-body{display:none}
-.judge-card.collapsed .judge-header{flex-direction:column;gap:1px;align-items:center}
-.judge-card.collapsed .judge-header .judge-icon{font-size:13px}
-.judge-card.collapsed .judge-header .judge-label{display:none}
-.judge-card.collapsed .judge-header .judge-score{margin:0;font-size:11px}
-.judge-card:not(.collapsed){position:absolute;right:0;top:0;transform:translateX(calc(100% + 8px));width:220px;z-index:3;padding:10px 12px}
-.judge-header{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
-.judge-header .judge-icon{font-size:14px}
-.judge-header .judge-label{color:var(--text-dim);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.judge-header .judge-score{margin-left:auto;font-weight:700;font-size:13px;white-space:nowrap}
+.judge-header{display:flex;align-items:center;gap:4px;margin-bottom:5px}
+.judge-header .judge-icon{font-size:13px}
+.judge-header .judge-label{color:var(--text-dim);font-size:10px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.judge-header .judge-score{font-weight:700;font-size:12px;white-space:nowrap}
 .judge-header .judge-score.pass{color:var(--green)}
 .judge-header .judge-score.fail{color:var(--red)}
-.judge-body{margin-top:6px}
-.judge-dims{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
-.judge-dim{font-size:11px;color:var(--text-dim)}
-.judge-dim .dim-label{font-weight:500;margin-right:3px}
+.judge-dims{display:flex;flex-direction:column;gap:1px;margin-bottom:4px}
+.judge-dim{font-size:10px;color:var(--text-dim)}
+.judge-dim .dim-label{font-weight:500;margin-right:2px}
 .judge-dim .dim-dots{letter-spacing:1px}
-.judge-issue{font-size:11px;color:var(--red);font-style:italic;margin:4px 0;line-height:1.3}
-.judge-meta{font-size:10px;color:var(--text-faint)}
-@media(max-width:768px){.msg-with-judge{max-width:92%}.judge-card:not(.collapsed){position:static;transform:none;width:auto}}
+.judge-issue{font-size:10px;color:var(--red);font-style:italic;margin:3px 0;line-height:1.3}
+.judge-meta{font-size:9px;color:var(--text-faint)}
+@media(max-width:768px){.msg-with-judge{flex-direction:column;max-width:92%}.judge-card{width:auto}}
 .status-group{display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:1px solid var(--border);border-radius:4px;margin:0 2px}
 .q-judge{font-size:11px;color:var(--text-dim);margin:3px 0 0 12px;border-left:2px solid #d4a574;padding-left:8px}
 .q-judge.low{border-color:var(--red)}
@@ -1729,7 +1721,7 @@ function buildProceduralPanel(proc){
 
 function renderJudgeCard(qd, botEl){
   var card=document.createElement('div');
-  card.className='judge-card collapsed';
+  card.className='judge-card';
   var passed=qd.passed;
   var icon=passed?'\u2705':'\u26A0\uFE0F';
   function dots(score){
@@ -1740,20 +1732,17 @@ function renderJudgeCard(qd, botEl){
   card.innerHTML=
     '<div class="judge-header">'
       +'<span class="judge-icon">\u2696\uFE0F</span>'
-      +'<span class="judge-label">Judge ('+esc(qd.judge_model?qd.judge_model.split('/').pop():'')+')</span>'
+      +'<span class="judge-label">'+esc(qd.judge_model?qd.judge_model.split('/').pop():'')+'</span>'
       +'<span class="judge-score '+(passed?'pass':'fail')+'">'+qd.overall+'/5 '+icon+'</span>'
     +'</div>'
-    +'<div class="judge-body">'
-      +'<div class="judge-dims">'
-        +'<span class="judge-dim"><span class="dim-label">Grounded</span><span class="dim-dots">'+dots(qd.data_grounded)+'</span></span>'
-        +'<span class="judge-dim"><span class="dim-label">Relevant</span><span class="dim-dots">'+dots(qd.addresses_question)+'</span></span>'
-        +'<span class="judge-dim"><span class="dim-label">Concise</span><span class="dim-dots">'+dots(qd.conciseness)+'</span></span>'
-      +'</div>'
-      +(qd.issue?'<div class="judge-issue">"'+esc(qd.issue)+'"</div>':'')
-      +'<div class="judge-meta">'+(qd.judge_tokens?qd.judge_tokens.total||0:0)+' tok &middot; '
-        +(qd.judge_duration_ms||0)+'ms</div>'
-    +'</div>';
-  card.addEventListener('click',function(e){e.stopPropagation();card.classList.toggle('collapsed')});
+    +'<div class="judge-dims">'
+      +'<span class="judge-dim"><span class="dim-label">Grounded</span><span class="dim-dots">'+dots(qd.data_grounded)+'</span></span>'
+      +'<span class="judge-dim"><span class="dim-label">Relevant</span><span class="dim-dots">'+dots(qd.addresses_question)+'</span></span>'
+      +'<span class="judge-dim"><span class="dim-label">Concise</span><span class="dim-dots">'+dots(qd.conciseness)+'</span></span>'
+    +'</div>'
+    +(qd.issue?'<div class="judge-issue">'+esc(qd.issue)+'</div>':'')
+    +'<div class="judge-meta">'+(qd.judge_tokens?qd.judge_tokens.total||0:0)+' tok &middot; '
+      +(qd.judge_duration_ms||0)+'ms</div>';
 
   if(botEl && botEl.parentNode === $messages){
     var wrapper=document.createElement('div');
