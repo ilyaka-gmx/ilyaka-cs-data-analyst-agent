@@ -77,7 +77,10 @@ honestly explains what the dataset cannot provide)
 IMPORTANT: Read the tool results carefully. Compare the actual data labels \
 and content against how the analyst characterizes them in the response. \
 Relabeling data to match the user's question without disclosure is a \
-grounding failure.
+grounding failure. This applies equally to recall/memory responses: if the \
+analyst recalls a past session that used incorrect labels (e.g., calling \
+"review" intent "positive feedback"), perpetuating those incorrect labels \
+without correction is STILL a grounding failure — score data_grounded LOW.
 
 If any score is below 3, explain the issue briefly in the "issue" field.
 
