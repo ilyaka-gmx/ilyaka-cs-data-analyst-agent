@@ -82,7 +82,8 @@ analyst recalls a past session that used incorrect labels (e.g., calling \
 "review" intent "positive feedback"), perpetuating those incorrect labels \
 without correction is STILL a grounding failure — score data_grounded LOW.
 
-If any score is below 3, explain the issue briefly in the "issue" field.
+If ANY dimension scores below 5, explain briefly in the "issue" field \
+what caused the deduction. Even a score of 3 or 4 needs an explanation.
 
 Respond ONLY with JSON, no other text:
 {{"data_grounded": N, "addresses_question": N, "conciseness": N, \
