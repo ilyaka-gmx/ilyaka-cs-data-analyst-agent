@@ -51,6 +51,35 @@ CHECKPOINTS_DB: Path = PROJECT_ROOT / "checkpoints.db"
 # --- Agent Settings ---
 
 MAX_ITERATIONS: int = 12
+
+# --- Quality Scoring ---
+
+ENABLE_QUALITY_SCORING: bool = (
+    os.environ.get("ENABLE_QUALITY_SCORING", "false").lower() == "true"
+)
+QUALITY_SCORE_THRESHOLD: int = int(
+    os.environ.get("QUALITY_SCORE_THRESHOLD", "3")
+)
+AUTO_RETRY_ON_LOW_SCORE: bool = (
+    os.environ.get("AUTO_RETRY_ON_LOW_SCORE", "false").lower() == "true"
+)
+
+# --- Model Pricing (per 1M tokens) ---
+
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "Qwen/Qwen3-235B-A22B-Instruct-2507": {"input": 0.20, "output": 0.60},
+    "Qwen/Qwen3-30B-A3B-Instruct-2507": {"input": 0.10, "output": 0.30},
+    "meta-llama/Llama-3.3-70B-Instruct": {"input": 0.13, "output": 0.40},
+}
+
+
+def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Estimate cost in USD for a given model and token counts."""
+    pricing = MODEL_PRICING.get(model, {"input": 0.20, "output": 0.60})
+    return (
+        prompt_tokens * pricing["input"]
+        + completion_tokens * pricing["output"]
+    ) / 1_000_000
 SEED: int = 42
 HEALTH_CHECK_INTERVAL_SECONDS: int = int(
     os.environ.get("HEALTH_CHECK_INTERVAL", "300")

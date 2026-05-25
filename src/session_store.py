@@ -35,6 +35,7 @@ class QueryTrace:
     final_response_preview: str = ""
     final_response: str = ""
     memory_ops: dict = field(default_factory=dict)
+    quality_score: dict = field(default_factory=dict)
 
 
 @dataclass

@@ -24,7 +24,14 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.agent import build_graph, token_tracker, tool_timer
-from src.config import AGENT_MODEL, CHECKPOINTS_DB, PROFILES_DIR
+from src.config import (
+    AGENT_MODEL,
+    CHECKPOINTS_DB,
+    ENABLE_QUALITY_SCORING,
+    JUDGE_MODEL,
+    PROFILES_DIR,
+    estimate_cost,
+)
 from src.data import metadata
 from src.health import run_startup_checks
 from src.memory import load_profile
@@ -306,6 +313,34 @@ async def chat(request: Request):
         }
         yield f"event: answer\ndata: {json.dumps(answer_data)}\n\n"
 
+        quality_scoring = body.get("quality_scoring", ENABLE_QUALITY_SCORING)
+        if quality_scoring and final_answer:
+            try:
+                from src.quality import score_response
+
+                tool_calls_with_results = []
+                for i, s in enumerate(reasoning_steps):
+                    if s.get("type") == "tool_call":
+                        result = ""
+                        for j in range(i + 1, len(reasoning_steps)):
+                            if reasoning_steps[j].get("type") == "tool_result":
+                                result = reasoning_steps[j].get("content", "")
+                                break
+                        tool_calls_with_results.append(
+                            {"name": s["name"], "result": result}
+                        )
+
+                quality = score_response(
+                    user_query=query,
+                    agent_response=final_answer,
+                    tool_calls=tool_calls_with_results,
+                )
+                trace.quality_score = quality.to_dict()
+                store._save()
+                yield f"event: quality\ndata: {json.dumps(quality.to_dict())}\n\n"
+            except Exception as e:
+                log.warning("Quality scoring failed: %s", e)
+
     return StreamingResponse(
         event_stream(), media_type="text/event-stream"
     )
@@ -499,6 +534,42 @@ def admin_stats():
 
     total_queries = sum(c.query_count for c in store.chats.values())
 
+    scored_count = 0
+    high_count = 0
+    med_count = 0
+    low_count = 0
+    agent_total_tokens = 0
+    judge_total_tokens = 0
+    for chat in store.chats.values():
+        for q in chat.queries:
+            agent_total_tokens += q.tokens.get("total", 0)
+            if q.quality_score:
+                scored_count += 1
+                overall = q.quality_score.get("overall", 0)
+                if overall >= 4:
+                    high_count += 1
+                elif overall >= 3:
+                    med_count += 1
+                else:
+                    low_count += 1
+                judge_total_tokens += q.quality_score.get(
+                    "judge_tokens", {}
+                ).get("total", 0)
+
+    agent_cost = estimate_cost(
+        AGENT_MODEL, token_tracker.total_prompt_tokens,
+        token_tracker.total_completion_tokens,
+    )
+    judge_cost = estimate_cost(JUDGE_MODEL, 0, 0)
+    if scored_count > 0:
+        jt = {"prompt": 0, "completion": 0}
+        for chat in store.chats.values():
+            for q in chat.queries:
+                jt_q = q.quality_score.get("judge_tokens", {})
+                jt["prompt"] += jt_q.get("prompt", 0)
+                jt["completion"] += jt_q.get("completion", 0)
+        judge_cost = estimate_cost(JUDGE_MODEL, jt["prompt"], jt["completion"])
+
     return {
         "total_users": len(user_ids),
         "users": sorted(user_ids),
@@ -507,6 +578,17 @@ def admin_stats():
         "total_profiles": profile_count,
         "total_facts": total_facts,
         "total_queries": total_queries,
+        "quality": {
+            "scored": scored_count,
+            "total": total_queries,
+            "high": high_count,
+            "med": med_count,
+            "low": low_count,
+        },
+        "costs": {
+            "agent": round(agent_cost, 6),
+            "judge": round(judge_cost, 6),
+        },
     }
 
 
@@ -529,6 +611,23 @@ def all_tags(user_id: str | None = Query(default=None)):
 
 @app.get("/api/meta")
 def meta():
+    agent_cost = estimate_cost(
+        AGENT_MODEL,
+        token_tracker.total_prompt_tokens,
+        token_tracker.total_completion_tokens,
+    )
+
+    judge_tokens = {"prompt": 0, "completion": 0, "total": 0}
+    for chat in store.chats.values():
+        for q in chat.queries:
+            jt = q.quality_score.get("judge_tokens", {})
+            judge_tokens["prompt"] += jt.get("prompt", 0)
+            judge_tokens["completion"] += jt.get("completion", 0)
+            judge_tokens["total"] += jt.get("total", 0)
+    judge_cost = estimate_cost(
+        JUDGE_MODEL, judge_tokens["prompt"], judge_tokens["completion"]
+    )
+
     return {
         "dataset": {
             "row_count": metadata.row_count,
@@ -544,14 +643,13 @@ def meta():
                 token_tracker.total_prompt_tokens
                 + token_tracker.total_completion_tokens
             ),
-            "cost": round(
-                (
-                    token_tracker.total_prompt_tokens * 0.20
-                    + token_tracker.total_completion_tokens * 0.60
-                )
-                / 1_000_000,
-                6,
-            ),
+            "cost": round(agent_cost, 6),
+        },
+        "judge": {
+            "model": JUDGE_MODEL,
+            "model_short": JUDGE_MODEL.split("/")[-1],
+            "tokens": judge_tokens,
+            "cost": round(judge_cost, 6),
         },
     }
 

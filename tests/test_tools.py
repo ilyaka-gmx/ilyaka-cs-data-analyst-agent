@@ -241,4 +241,4 @@ def test_tool_exposure_fallback():
     from src.tools import get_tools_for_query_type
 
     tools = get_tools_for_query_type("unknown_type")
-    assert len(tools) == 9
+    assert len(tools) == 11
