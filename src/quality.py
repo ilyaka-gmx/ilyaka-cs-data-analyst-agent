@@ -82,6 +82,15 @@ analyst recalls a past session that used incorrect labels (e.g., calling \
 "review" intent "positive feedback"), perpetuating those incorrect labels \
 without correction is STILL a grounding failure — score data_grounded LOW.
 
+EXCEPTION — profile and memory operations: When the analyst updates a \
+user profile after explicit user confirmation (the user said "yes" or \
+"update" or "confirm"), restating the confirmed facts in the response is \
+NOT fabrication — the facts come from the conversation, not from tool \
+output. Do not penalize data_grounded for this. A tool returning a \
+generic success message (e.g., "facts replaced") does not mean the \
+specific facts are ungrounded — they were established earlier in the \
+conversation.
+
 If ANY dimension scores below 5, explain briefly in the "issue" field \
 what caused the deduction. Even a score of 3 or 4 needs an explanation.
 
