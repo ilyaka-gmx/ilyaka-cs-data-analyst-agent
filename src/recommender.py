@@ -13,7 +13,6 @@ import re
 
 from src.config import ROUTER_MODEL, get_llm
 from src.data import CATEGORIES
-from src.memory import load_profile
 from src.session_store import ChatMetadata, store
 
 log = logging.getLogger(__name__)
@@ -24,7 +23,6 @@ The dataset is the Bitext Customer Service dataset with {num_categories} categor
 
 Given:
 - The current conversation (if any)
-- The user's profile facts (if any)
 - Summaries of the user's past sessions (if provided — these are CRITICAL)
 
 Suggest 2-3 follow-up queries the user might find valuable. Prioritize:
@@ -40,10 +38,9 @@ Respond with JSON:
 
 Rules:
 - Queries MUST be answerable by the dataset. The dataset has ONLY these columns: category, intent, instruction (customer text), response (agent text). It has NO location, date, customer name, sentiment, priority, or satisfaction data. NEVER suggest queries that filter by information not in the dataset.
-- The user profile (name, location, etc.) is for personalization context ONLY — do NOT inject profile facts into query suggestions. "Show feedback from Herzliya" is WRONG because the dataset has no location column.
 - Be specific: "Show 5 examples from REFUND" not "explore more data".
 - If past sessions mention specific queries/tools/categories, build on those topics.
-- If there's no conversation yet and no past sessions, suggest good starting queries based on the dataset categories.
+- If there's no conversation yet and no past sessions, suggest good starting queries based on the dataset categories and intents.
 - Do NOT suggest queries the user already asked in this session.
 - Keep each "reason" under 30 words. Keep each "query" under 20 words.
 - Respond ONLY with the JSON object — no markdown fences, no extra text."""
@@ -113,11 +110,6 @@ def get_recommendations(
     Returns:
         List of {"query": str, "reason": str} dicts.
     """
-    profile = load_profile(user_id)
-    profile_text = ""
-    if profile.facts:
-        profile_text = f"User profile facts: {', '.join(profile.facts)}"
-
     conversation_text = ""
     if current_messages:
         conversation_text = _build_conversation_context(current_messages)
@@ -129,7 +121,7 @@ def get_recommendations(
                  use_past_sessions, user_id, current_thread_id,
                  session_text[:200] if session_text else "<empty>")
 
-    context_parts = [p for p in [profile_text, conversation_text, session_text] if p]
+    context_parts = [p for p in [conversation_text, session_text] if p]
     context = "\n\n".join(context_parts) if context_parts else "No conversation or profile yet."
 
     sys_prompt = RECOMMEND_SYSTEM_PROMPT.format(
