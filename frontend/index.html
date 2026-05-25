@@ -283,15 +283,17 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .admin-user-badge{display:inline-block;font-size:9px;padding:1px 6px;background:var(--accent-bg);color:var(--accent);border-radius:3px;margin-left:6px;font-weight:600}
 
 /* Judge card (side panel next to bot message) */
-.msg-with-judge{display:flex;align-items:flex-start;gap:8px;align-self:flex-start;max-width:760px}
-.msg-with-judge .msg.bot{flex:1;min-width:0}
-.judge-card{width:auto;min-width:44px;padding:6px 8px;border-radius:8px;background:var(--surface);border:1px solid #d4a574;cursor:pointer;transition:.2s;box-shadow:var(--shadow);flex-shrink:0;align-self:flex-start}
+.msg-with-judge{display:flex;align-items:flex-start;gap:8px;align-self:flex-start;max-width:640px;position:relative}
+.msg-with-judge .msg.bot{flex:1;min-width:0;max-width:none}
+.judge-card{padding:6px;border-radius:8px;background:var(--surface);border:1px solid #d4a574;cursor:pointer;transition:all .2s;box-shadow:var(--shadow);flex-shrink:0;align-self:flex-start;overflow:hidden}
 [data-theme="dark"] .judge-card{border-color:#8b6914}
+.judge-card.collapsed{width:36px;height:auto}
 .judge-card.collapsed .judge-body{display:none}
-.judge-card.collapsed{min-width:44px;max-width:44px;text-align:center}
-.judge-card.collapsed .judge-header{flex-direction:column;gap:2px}
+.judge-card.collapsed .judge-header{flex-direction:column;gap:1px;align-items:center}
+.judge-card.collapsed .judge-header .judge-icon{font-size:13px}
 .judge-card.collapsed .judge-header .judge-label{display:none}
-.judge-card:not(.collapsed){min-width:180px;max-width:220px}
+.judge-card.collapsed .judge-header .judge-score{margin:0;font-size:11px}
+.judge-card:not(.collapsed){position:absolute;right:0;top:0;transform:translateX(calc(100% + 8px));width:220px;z-index:3;padding:10px 12px}
 .judge-header{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
 .judge-header .judge-icon{font-size:14px}
 .judge-header .judge-label{color:var(--text-dim);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -305,7 +307,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .judge-dim .dim-dots{letter-spacing:1px}
 .judge-issue{font-size:11px;color:var(--red);font-style:italic;margin:4px 0;line-height:1.3}
 .judge-meta{font-size:10px;color:var(--text-faint)}
-@media(max-width:768px){.msg-with-judge{flex-direction:column;max-width:92%}.judge-card.collapsed{max-width:none;min-width:0}.judge-card:not(.collapsed){max-width:none}}
+@media(max-width:768px){.msg-with-judge{max-width:92%}.judge-card:not(.collapsed){position:static;transform:none;width:auto}}
 .status-group{display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:1px solid var(--border);border-radius:4px;margin:0 2px}
 .q-judge{font-size:11px;color:var(--text-dim);margin:3px 0 0 12px;border-left:2px solid #d4a574;padding-left:8px}
 .q-judge.low{border-color:var(--red)}
