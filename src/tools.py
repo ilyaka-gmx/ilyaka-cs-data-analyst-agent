@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from src.config import get_llm, get_summarizer_model
 from src.data import CATEGORIES, CATEGORY_INTENT_MAP, INTENTS, dataset
-from src.memory import add_fact, get_facts
+from src.memory import add_fact, get_facts, replace_facts
 from src.session_store import store
 from src.toon import to_toon
 
@@ -375,7 +375,29 @@ def recall_profile() -> str:
     return get_facts(get_current_user_id())
 
 
-# --- Tool 10: recall_past_sessions ---
+# --- Tool 10: update_profile ---
+
+
+class UpdateProfileInput(BaseModel):
+    facts: list[str] = Field(
+        description="The complete new list of profile facts. "
+        "This replaces the entire profile — omit facts to remove them, "
+        "edit facts to update them."
+    )
+
+
+@tool(args_schema=UpdateProfileInput)
+def update_profile(facts: list[str]) -> str:
+    """Replace the user's entire profile with the given list of facts.
+
+    Use this ONLY after the user has confirmed the proposed changes.
+    The agent must first recall_profile, propose the updated profile
+    in text, and wait for the user's approval before calling this tool.
+    """
+    return replace_facts(get_current_user_id(), facts)
+
+
+# --- Tool 11: recall_past_sessions ---
 
 
 class RecallPastSessionsInput(BaseModel):
@@ -468,7 +490,10 @@ DATA_TOOL_NAMES = [
     "get_distribution", "get_examples", "search_instructions",
 ]
 ANALYSIS_TOOL_NAMES = DATA_TOOL_NAMES + ["summarize_responses"]
-MEMORY_TOOL_NAMES = ["remember_fact", "recall_profile", "recall_past_sessions"]
+MEMORY_TOOL_NAMES = [
+    "remember_fact", "recall_profile", "update_profile",
+    "recall_past_sessions",
+]
 
 TOOL_EXPOSURE_MAP: dict[str, list[str]] = {
     "structured": DATA_TOOL_NAMES + MEMORY_TOOL_NAMES,
@@ -490,6 +515,7 @@ def get_all_tools() -> list:
         summarize_responses,
         remember_fact,
         recall_profile,
+        update_profile,
         recall_past_sessions,
     ]
 

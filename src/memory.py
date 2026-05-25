@@ -74,6 +74,19 @@ def add_fact(user_id: str, fact: str) -> str:
         return f"Already known: {fact.strip()}"
 
 
+def replace_facts(user_id: str, facts: list[str]) -> str:
+    """Replace the user's entire profile with the given facts list."""
+    with _profile_lock:
+        profile = load_profile(user_id)
+        old_count = len(profile.facts)
+        profile.facts = [f.strip() for f in facts if f.strip()]
+        save_profile(profile)
+        return (
+            f"Profile updated: {old_count} facts replaced with "
+            f"{len(profile.facts)} facts."
+        )
+
+
 def get_facts(user_id: str) -> str:
     """Retrieve all facts about a user. Returns formatted string."""
     profile = load_profile(user_id)

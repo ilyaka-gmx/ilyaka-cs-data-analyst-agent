@@ -37,5 +37,5 @@ _backup/
 .DS_Store
 Thumbs.db
 
-# Chainlit (removed from project, kept for cleanup)
-.chainlit/
+# Checkpoints
+checkpoints.db**

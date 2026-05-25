@@ -92,7 +92,7 @@ def router_node(state: AgentState) -> dict:
     """Classify the latest user message via the router model."""
     last_message = state["messages"][-1].content
     result = classify_query(last_message)
-    return {"query_type": result.classification}
+    return {"query_type": result.classification, "iteration_count": 0}
 
 
 def agent_step(state: AgentState) -> dict:
