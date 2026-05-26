@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.agent import build_graph
+from src.config import RECURSION_LIMIT
 
 
 # --- Fast tests (no LLM calls) ---
@@ -32,7 +33,7 @@ def graph():
 
 @pytest.fixture
 def config():
-    return {"configurable": {"thread_id": "test"}, "recursion_limit": 12}
+    return {"configurable": {"thread_id": "test"}, "recursion_limit": RECURSION_LIMIT}
 
 
 def _invoke(graph, query: str, config: dict, user_id: str = "test") -> str:
@@ -123,7 +124,7 @@ def test_persistence_across_turns():
     checkpointer = SqliteSaver(conn)
     graph = build_graph(checkpointer=checkpointer)
 
-    config = {"configurable": {"thread_id": "persist_test"}, "recursion_limit": 12}
+    config = {"configurable": {"thread_id": "persist_test"}, "recursion_limit": RECURSION_LIMIT}
 
     _invoke(graph, "How many refund requests did we get?", config)
     final = _invoke(graph, "What about complaints?", config)
@@ -160,7 +161,7 @@ def test_gate4_persistence_across_restart(tmp_path):
     """Simulate process restart: two separate graph instances, same SQLite file."""
     db_path = tmp_path / "checkpoints.db"
     thread_id = f"restart_{uuid.uuid4().hex[:8]}"
-    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 12}
+    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
 
     conn1 = sqlite3.connect(str(db_path), check_same_thread=False)
     cp1 = SqliteSaver(conn1)
@@ -192,7 +193,7 @@ def test_gate4_follow_up_chain():
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     checkpointer = SqliteSaver(conn)
     graph = build_graph(checkpointer=checkpointer)
-    cfg = {"configurable": {"thread_id": "chain_test"}, "recursion_limit": 12}
+    cfg = {"configurable": {"thread_id": "chain_test"}, "recursion_limit": RECURSION_LIMIT}
 
     print("  [1/3] How many complaint entries?")
     r1 = _invoke(graph, "How many complaint entries are in the dataset?", cfg)
@@ -222,8 +223,8 @@ def test_gate4_independent_sessions():
     checkpointer = SqliteSaver(conn)
     graph = build_graph(checkpointer=checkpointer)
 
-    cfg_a = {"configurable": {"thread_id": "session_A"}, "recursion_limit": 12}
-    cfg_b = {"configurable": {"thread_id": "session_B"}, "recursion_limit": 12}
+    cfg_a = {"configurable": {"thread_id": "session_A"}, "recursion_limit": RECURSION_LIMIT}
+    cfg_b = {"configurable": {"thread_id": "session_B"}, "recursion_limit": RECURSION_LIMIT}
 
     print("  [1/4] Session A: ORDER examples")
     _invoke(graph, "Show me 3 examples from ORDER.", cfg_a)
@@ -272,23 +273,46 @@ def test_gate4_main_uses_sqlite_saver():
 # ==========================================================================
 
 
-@pytest.mark.slow
-def test_gate5_remember_fact_stores_profile(tmp_path, monkeypatch):
-    """Agent should store user facts when personal info is shared.
-
-    Checks the outcome (profile file created with facts) — model-agnostic.
-    """
-    import src.config as cfg_mod
-
-    monkeypatch.setattr(cfg_mod, "PROFILES_DIR", tmp_path)
+def _mock_mem0(monkeypatch):
+    """Set up an in-memory mock for mem0 in src.memory."""
     import src.memory as mem_mod
 
-    monkeypatch.setattr(mem_mod, "PROFILES_DIR", tmp_path)
+    _store: dict[str, list[dict]] = {}
+
+    def mock_add(text, user_id=None, **kw):
+        _store.setdefault(user_id, []).append({"memory": text, "id": str(len(_store.get(user_id, [])))})
+        return {"results": [{"event": "ADD", "memory": text}]}
+
+    def mock_get_all(filters=None, **kw):
+        uid = (filters or {}).get("user_id", "default")
+        return {"results": _store.get(uid, [])}
+
+    def mock_search(query, filters=None, **kw):
+        uid = (filters or {}).get("user_id", "default")
+        return {"results": [m for m in _store.get(uid, []) if query.lower() in m["memory"].lower()]}
+
+    def mock_delete_all(user_id=None, **kw):
+        _store.pop(user_id, None)
+
+    class MockMemory:
+        add = staticmethod(mock_add)
+        get_all = staticmethod(mock_get_all)
+        search = staticmethod(mock_search)
+        delete_all = staticmethod(mock_delete_all)
+
+    monkeypatch.setattr(mem_mod, "_memory", MockMemory())
+    return _store
+
+
+@pytest.mark.slow
+def test_gate5_remember_fact_stores_profile(monkeypatch):
+    """Agent should call remember_fact when personal info is shared."""
+    _mock_mem0(monkeypatch)
 
     uid = "remember_user"
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     graph = build_graph(checkpointer=SqliteSaver(conn))
-    cfg = {"configurable": {"thread_id": "profile_test"}, "recursion_limit": 12}
+    cfg = {"configurable": {"thread_id": "profile_test"}, "recursion_limit": RECURSION_LIMIT}
 
     result = _invoke_full(
         graph,
@@ -297,32 +321,18 @@ def test_gate5_remember_fact_stores_profile(tmp_path, monkeypatch):
         user_id=uid,
     )
 
-    profile_file = tmp_path / f"{uid}.json"
     tool_called = _has_tool_call(result["messages"], "remember_fact")
-    file_exists = profile_file.exists()
-
-    assert tool_called or file_exists, (
-        "Agent should either call remember_fact (structured tool_call) "
-        "or produce a profile file when user shares personal info"
+    assert tool_called, (
+        "Agent should call remember_fact when user shares personal info"
     )
-    if file_exists:
-        data = json.loads(profile_file.read_text())
-        assert len(data.get("facts", [])) > 0
     conn.close()
 
 
 @pytest.mark.slow
-def test_gate5_recall_profile_responds(tmp_path, monkeypatch):
-    """Agent should respond with stored facts when asked what it remembers.
-
-    Uses direct memory API to seed the profile, then asks the agent.
-    """
-    import src.config as cfg_mod
-
-    monkeypatch.setattr(cfg_mod, "PROFILES_DIR", tmp_path)
+def test_gate5_recall_profile_responds(monkeypatch):
+    """Agent should respond with stored facts when asked what it remembers."""
+    _mock_mem0(monkeypatch)
     import src.memory as mem_mod
-
-    monkeypatch.setattr(mem_mod, "PROFILES_DIR", tmp_path)
 
     uid = "recall_user"
     mem_mod.add_fact(uid, "User's name is Alex")
@@ -330,7 +340,7 @@ def test_gate5_recall_profile_responds(tmp_path, monkeypatch):
 
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     graph = build_graph(checkpointer=SqliteSaver(conn))
-    cfg = {"configurable": {"thread_id": "recall_test"}, "recursion_limit": 12}
+    cfg = {"configurable": {"thread_id": "recall_test"}, "recursion_limit": RECURSION_LIMIT}
 
     final = _invoke(
         graph, "What do you remember about me?", cfg, user_id=uid
@@ -343,17 +353,13 @@ def test_gate5_recall_profile_responds(tmp_path, monkeypatch):
 
 
 @pytest.mark.slow
-def test_gate5_profile_persistence_across_restart(tmp_path, monkeypatch):
+def test_gate5_profile_persistence_across_restart(monkeypatch):
     """Profile persists independently of conversation checkpoints.
 
     Seeds profile via API, then asks agent in a fresh session.
     """
-    import src.config as cfg_mod
-
-    monkeypatch.setattr(cfg_mod, "PROFILES_DIR", tmp_path)
+    _mock_mem0(monkeypatch)
     import src.memory as mem_mod
-
-    monkeypatch.setattr(mem_mod, "PROFILES_DIR", tmp_path)
 
     uid = "persist_profile_user"
     mem_mod.add_fact(uid, "User's name is Sam")
@@ -362,7 +368,7 @@ def test_gate5_profile_persistence_across_restart(tmp_path, monkeypatch):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     graph = build_graph(checkpointer=SqliteSaver(conn))
 
-    cfg = {"configurable": {"thread_id": "profile_s2"}, "recursion_limit": 12}
+    cfg = {"configurable": {"thread_id": "profile_s2"}, "recursion_limit": RECURSION_LIMIT}
     final = _invoke(graph, "What do you remember about me?", cfg, user_id=uid)
 
     assert any(w in final.lower() for w in ("sam", "order")), (
@@ -371,60 +377,35 @@ def test_gate5_profile_persistence_across_restart(tmp_path, monkeypatch):
     conn.close()
 
 
-def test_gate5_profile_additive(tmp_path, monkeypatch):
+def test_gate5_profile_additive(monkeypatch):
     """Multiple facts accumulate in the profile (not overwritten)."""
-    import src.config as cfg_mod
-
-    monkeypatch.setattr(cfg_mod, "PROFILES_DIR", tmp_path)
-    import src.memory as mem_mod
-
-    monkeypatch.setattr(mem_mod, "PROFILES_DIR", tmp_path)
-
-    from src.memory import add_fact, load_profile
+    _mock_mem0(monkeypatch)
+    from src.memory import add_fact, get_all_memories_raw
 
     uid = "additive_user"
     add_fact(uid, "Likes cats")
     add_fact(uid, "Works in finance")
     add_fact(uid, "Prefers CSV exports")
 
-    profile = load_profile(uid)
-    assert len(profile.facts) == 3, f"Should have 3 facts, got {len(profile.facts)}"
-    assert "Likes cats" in profile.facts
-    assert "Works in finance" in profile.facts
-    assert "Prefers CSV exports" in profile.facts
-
-
-def test_gate5_profile_no_duplicates(tmp_path, monkeypatch):
-    """Adding the same fact twice should not create duplicates."""
-    import src.config as cfg_mod
-
-    monkeypatch.setattr(cfg_mod, "PROFILES_DIR", tmp_path)
-    import src.memory as mem_mod
-
-    monkeypatch.setattr(mem_mod, "PROFILES_DIR", tmp_path)
-
-    from src.memory import add_fact, load_profile
-
-    uid = "dedup_user"
-    add_fact(uid, "Works in sales")
-    result = add_fact(uid, "Works in sales")
-
-    assert "Already known" in result
-    profile = load_profile(uid)
-    assert len(profile.facts) == 1
+    memories = get_all_memories_raw(uid)
+    assert len(memories) == 3, f"Should have 3 facts, got {len(memories)}"
+    texts = [m["memory"] for m in memories]
+    assert "Likes cats" in texts
+    assert "Works in finance" in texts
+    assert "Prefers CSV exports" in texts
 
 
 def test_gate5_profile_separate_from_checkpoints():
-    """Profile storage (JSON files) is separate from conversation checkpoints (SQLite)."""
-    from src.config import CHECKPOINTS_DB, PROFILES_DIR
+    """Mem0 data directory is separate from conversation checkpoints."""
+    from src.config import CHECKPOINTS_DB, MEM0_DATA_DIR
 
-    assert PROFILES_DIR.name == "profiles"
+    assert MEM0_DATA_DIR.name == "mem0_data"
     assert CHECKPOINTS_DB.name == "checkpoints.db"
-    assert PROFILES_DIR != CHECKPOINTS_DB.parent or PROFILES_DIR.name != CHECKPOINTS_DB.name
+    assert MEM0_DATA_DIR != CHECKPOINTS_DB.parent
 
 
-def test_gate5_profiles_dir_created():
-    """profiles/ directory should be created automatically by config.py."""
-    from src.config import PROFILES_DIR
+def test_gate5_mem0_data_dir_created():
+    """mem0_data/ directory should be created automatically by config.py."""
+    from src.config import MEM0_DATA_DIR
 
-    assert PROFILES_DIR.exists(), "PROFILES_DIR should be auto-created by config.py"
+    assert MEM0_DATA_DIR.exists(), "MEM0_DATA_DIR should be auto-created by config.py"

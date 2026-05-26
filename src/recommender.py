@@ -170,11 +170,13 @@ def get_recommendation_context_for_agent(
     Instead of calling the recommender LLM, this provides raw context
     so the agent LLM itself can reason about what to recommend.
     """
-    profile = load_profile(user_id)
+    from src.memory import get_facts
+
+    profile_text = get_facts(user_id)
 
     parts = []
-    if profile.facts:
-        parts.append(f"User profile: {', '.join(profile.facts)}")
+    if "no profile" not in profile_text.lower():
+        parts.append(profile_text)
 
     if use_past_sessions:
         session_text = _build_session_summary(user_id, exclude_thread=current_thread_id)

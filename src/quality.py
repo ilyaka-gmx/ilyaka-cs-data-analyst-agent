@@ -12,7 +12,8 @@ import logging
 import time
 from dataclasses import dataclass
 
-from src.config import JUDGE_MODEL, QUALITY_SCORE_THRESHOLD, get_llm
+import src.config as cfg
+from src.config import QUALITY_SCORE_THRESHOLD, get_llm
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +71,16 @@ lacks the information needed to answer (e.g., no sentiment labels), did the \
 analyst acknowledge this limitation? Silently substituting different data \
 without disclosure scores LOW. \
 (1=completely off-topic or silently substituted, 5=directly answers or \
-honestly explains what the dataset cannot provide)
+honestly explains what the dataset cannot provide) \
+IMPORTANT for searches: If the analyst did a literal search, got no \
+results, and told the user "not found" or "doesn't exist" — check \
+whether they tried alternative approaches (synonyms, related intents, \
+broader categories). A single failed search_instructions call followed \
+by "the data doesn't have this" is a LAZY response — score 2-3. \
+A competent analyst rephrases and explores semantically before giving up. \
+However, if the topic genuinely has no relation to the dataset \
+(e.g., asking about motorcycles in a customer service dataset), \
+then honestly saying so is correct — score 4-5.
 - conciseness: Is it appropriately brief? \
 (1=extremely verbose/off-track, 5=concise and focused)
 
@@ -90,6 +100,16 @@ output. Do not penalize data_grounded for this. A tool returning a \
 generic success message (e.g., "facts replaced") does not mean the \
 specific facts are ungrounded — they were established earlier in the \
 conversation.
+
+EXCEPTION — session recall (recall_past_sessions): When the analyst \
+uses recall_past_sessions to retrieve prior conversation summaries, \
+the tool returns condensed session metadata. The analyst may elaborate \
+on these summaries using details from the actual prior conversations \
+(e.g., mentioning specific intents explored, tools used, or topics \
+discussed). This is NOT fabrication — the details come from the \
+recalled session history, not from the analyst's imagination. \
+Do not penalize data_grounded for providing context beyond the \
+literal tool output when recall_past_sessions was used.
 
 If ANY dimension scores below 5, explain briefly in the "issue" field \
 what caused the deduction. Even a score of 3 or 4 needs an explanation.
@@ -127,7 +147,7 @@ def score_response(
         tool_details=tool_details[:800],
     )
 
-    judge_llm = get_llm(JUDGE_MODEL, temperature=0, max_tokens=150)
+    judge_llm = get_llm(cfg.JUDGE_MODEL, temperature=0, max_tokens=150)
 
     start = time.time()
     response = judge_llm.invoke(prompt)
@@ -168,7 +188,7 @@ def score_response(
         issue=scores.get("issue", ""),
         judge_tokens=judge_tokens,
         judge_duration_ms=duration_ms,
-        judge_model=JUDGE_MODEL,
+        judge_model=cfg.JUDGE_MODEL,
     )
 
 

@@ -12,7 +12,7 @@ from typing import Literal
 from src.config import (
     AGENT_MODEL,
     CHECKPOINTS_DB,
-    PROFILES_DIR,
+    MEM0_DATA_DIR,
     ROUTER_MODEL,
     get_llm,
 )
@@ -93,10 +93,10 @@ def check_persistence() -> CheckResult:
     start = time.time()
     issues = []
 
-    if not PROFILES_DIR.exists():
-        issues.append(f"Profiles dir missing: {PROFILES_DIR}")
-    elif not PROFILES_DIR.is_dir():
-        issues.append(f"Profiles path is not a directory: {PROFILES_DIR}")
+    if not MEM0_DATA_DIR.exists():
+        issues.append(f"Mem0 data dir missing: {MEM0_DATA_DIR}")
+    elif not MEM0_DATA_DIR.is_dir():
+        issues.append(f"Mem0 data path is not a directory: {MEM0_DATA_DIR}")
 
     try:
         test_file = CHECKPOINTS_DB.parent / ".write_test"
@@ -108,7 +108,7 @@ def check_persistence() -> CheckResult:
     duration = int((time.time() - start) * 1000)
     if issues:
         return CheckResult("Persistence", "warn", "; ".join(issues), duration)
-    return CheckResult("Persistence", "pass", "SQLite + profiles writable", duration)
+    return CheckResult("Persistence", "pass", "SQLite + mem0 data writable", duration)
 
 
 def run_startup_checks() -> HealthReport:
@@ -131,7 +131,8 @@ def run_diagnostics() -> HealthReport:
     else:
         report.add(CheckResult("Checkpoint DB", "pass", "Not yet created (first run)", 0))
 
-    profiles = list(PROFILES_DIR.glob("*.json"))
-    report.add(CheckResult("Profiles", "pass", f"{len(profiles)} user profiles on disk", 0))
+    mem0_exists = MEM0_DATA_DIR.exists() and MEM0_DATA_DIR.is_dir()
+    report.add(CheckResult("Mem0 Storage", "pass" if mem0_exists else "warn",
+                           f"mem0_data/ {'exists' if mem0_exists else 'not found'}", 0))
 
     return report

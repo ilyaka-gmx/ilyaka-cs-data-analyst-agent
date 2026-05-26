@@ -13,8 +13,10 @@ combined_ca_bundle.pem
 
 # Generated / runtime data
 checkpoints.db
+mem0_data/
 profiles/
 session_store.json
+model_selection.json
 uv.lock
 
 # Backup convention (per SKILL.md)

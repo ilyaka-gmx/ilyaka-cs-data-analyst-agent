@@ -11,6 +11,9 @@ pandas>=2.2.0
 # Schemas and validation
 pydantic>=2.0.0
 
+# Semantic memory (mem0 with Qdrant in-process)
+mem0ai>=2.0.2
+
 # MCP server
 fastmcp>=3.0.0
 

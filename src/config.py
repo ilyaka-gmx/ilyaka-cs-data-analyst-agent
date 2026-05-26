@@ -9,6 +9,7 @@ Dual-mode design:
   - Grader mode: no .pem file → standard system SSL (works out of the box)
 """
 
+import json
 import logging
 import os
 import ssl
@@ -21,6 +22,8 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
+os.environ.setdefault("MEM0_TELEMETRY", "false")
+
 # --- API Configuration ---
 
 NEBIUS_API_KEY: str = os.environ["NEBIUS_API_KEY"]
@@ -29,28 +32,87 @@ NEBIUS_BASE_URL: str = os.environ.get(
 )
 
 # --- Model IDs ---
-# Configurable via .env — grader can override if their account differs
+# Priority: model_selection.json > .env > defaults.
+# Admin UI writes model_selection.json; .env is for grader overrides.
 
-AGENT_MODEL: str = os.environ.get("AGENT_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507")
+_MODEL_SELECTION_PATH: Path = Path(__file__).parent.parent / "model_selection.json"
+
+def _load_model_selection() -> dict:
+    """Load persisted model selection, if any."""
+    try:
+        if _MODEL_SELECTION_PATH.exists():
+            with open(_MODEL_SELECTION_PATH) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_model_selection(data: dict) -> None:
+    """Persist model selection to JSON."""
+    with open(_MODEL_SELECTION_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+_saved = _load_model_selection()
+
+AGENT_MODEL: str = (
+    _saved.get("agent_model")
+    or os.environ.get("AGENT_MODEL")
+    or "Qwen/Qwen3-235B-A22B-Instruct-2507"
+)
 ROUTER_MODEL: str = os.environ.get(
     "ROUTER_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507"
 )
-JUDGE_MODEL: str = os.environ.get(
-    "JUDGE_MODEL", "meta-llama/Llama-3.3-70B-Instruct"
+JUDGE_MODEL: str = (
+    _saved.get("judge_model")
+    or os.environ.get("JUDGE_MODEL")
+    or "meta-llama/Llama-3.3-70B-Instruct"
 )
 FALLBACK_AGENT_MODEL: str = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+
+
+def set_agent_model(model_id: str) -> None:
+    """Update agent model at runtime and persist."""
+    global AGENT_MODEL
+    AGENT_MODEL = model_id
+    data = _load_model_selection()
+    data["agent_model"] = model_id
+    _save_model_selection(data)
+    log.info("Agent model changed to %s", model_id)
+
+
+def set_judge_model(model_id: str) -> None:
+    """Update judge model at runtime and persist."""
+    global JUDGE_MODEL
+    JUDGE_MODEL = model_id
+    data = _load_model_selection()
+    data["judge_model"] = model_id
+    _save_model_selection(data)
+    log.info("Judge model changed to %s", model_id)
+
+# Mem0 models (semantic memory — fact extraction + embeddings)
+MEM0_LLM_MODEL: str = os.environ.get(
+    "MEM0_LLM_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+)
+EMBEDDING_MODEL: str = os.environ.get("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
 
 # --- Paths ---
 
 PROJECT_ROOT: Path = Path(__file__).parent.parent
 DATA_DIR: Path = PROJECT_ROOT / "data"
 DATASET_PATH: Path = DATA_DIR / "bitext_dataset.csv"
-PROFILES_DIR: Path = PROJECT_ROOT / "profiles"
 CHECKPOINTS_DB: Path = PROJECT_ROOT / "checkpoints.db"
+
+# Mem0 storage: relative paths resolve against PROJECT_ROOT, absolute paths used as-is
+_mem0_path_raw: str = os.environ.get("MEM0_STORAGE_PATH", "mem0_data")
+MEM0_DATA_DIR: Path = (
+    Path(_mem0_path_raw) if Path(_mem0_path_raw).is_absolute()
+    else PROJECT_ROOT / _mem0_path_raw
+)
 
 # --- Agent Settings ---
 
 MAX_ITERATIONS: int = 12
+RECURSION_LIMIT: int = 2 * MAX_ITERATIONS + 4
 
 # --- Quality Scoring ---
 
@@ -64,12 +126,31 @@ AUTO_RETRY_ON_LOW_SCORE: bool = (
     os.environ.get("AUTO_RETRY_ON_LOW_SCORE", "false").lower() == "true"
 )
 
+# --- Reflection ---
+
+ENABLE_REFLECTION: bool = (
+    os.environ.get("ENABLE_REFLECTION", "true").lower() == "true"
+)
+
+# --- Query Decomposition ---
+
+ENABLE_DECOMPOSITION: bool = (
+    os.environ.get("ENABLE_DECOMPOSITION", "true").lower() == "true"
+)
+
 # --- Model Pricing (per 1M tokens) ---
 
 MODEL_PRICING: dict[str, dict[str, float]] = {
-    "Qwen/Qwen3-235B-A22B-Instruct-2507": {"input": 0.20, "output": 0.60},
+    "Qwen/Qwen3-235B-A22B-Instruct-2507": {"input": 0.20, "output": 3.60},
+    "Qwen/Qwen3.5-397B-A17B": {"input": 0.60, "output": 3.60},
     "Qwen/Qwen3-30B-A3B-Instruct-2507": {"input": 0.10, "output": 0.30},
+    "Qwen/Qwen3-32B": {"input": 0.10, "output": 0.30},
     "meta-llama/Llama-3.3-70B-Instruct": {"input": 0.13, "output": 0.40},
+    "NousResearch/Hermes-4-70B": {"input": 0.13, "output": 0.48},
+    "NousResearch/Hermes-4-405B": {"input": 0.60, "output": 1.80},
+    "zai-org/GLM-5.1": {"input": 1.40, "output": 4.80},
+    "nvidia/Llama-3_1-Nemotron-Ultra-253B-v1": {"input": 0.60, "output": 1.80},
+    "google/gemma-3-27b-it": {"input": 0.10, "output": 0.30},
 }
 
 
@@ -96,23 +177,38 @@ HEALTH_CHECK_INTERVAL_SECONDS: int = int(
 CA_BUNDLE: Path = PROJECT_ROOT / "combined_ca_bundle.pem"
 USE_ZSCALER: bool = CA_BUNDLE.exists()
 
+if USE_ZSCALER:
+    os.environ.setdefault("SSL_CERT_FILE", str(CA_BUNDLE))
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", str(CA_BUNDLE))
+
+    _original_create_default_context = ssl.create_default_context
+
+    def _zscaler_ssl_context(*args, **kwargs):
+        ctx = _original_create_default_context(*args, **kwargs)
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+        if "cafile" not in kwargs and "capath" not in kwargs:
+            ctx.load_verify_locations(cafile=str(CA_BUNDLE))
+        return ctx
+
+    ssl.create_default_context = _zscaler_ssl_context
+    log.info("Zscaler CA bundle detected — patched ssl.create_default_context globally")
+
 
 def get_http_client() -> httpx.Client | None:
     """Return a Zscaler-safe httpx.Client, or None for standard SSL."""
     if not USE_ZSCALER:
         return None
-    ssl_ctx = ssl.create_default_context(cafile=str(CA_BUNDLE))
-    ssl_ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
-    return httpx.Client(verify=ssl_ctx)
+    return httpx.Client()
 
 
 def get_async_http_client() -> httpx.AsyncClient | None:
     """Async variant for Chainlit / async tool calls."""
     if not USE_ZSCALER:
         return None
-    ssl_ctx = ssl.create_default_context(cafile=str(CA_BUNDLE))
-    ssl_ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
-    return httpx.AsyncClient(verify=ssl_ctx)
+    return httpx.AsyncClient()
+
+
+_THINKING_MODELS = {"Qwen/Qwen3.5-397B-A17B", "zai-org/GLM-5.1"}
 
 
 def get_llm(model: str, **kwargs):
@@ -121,11 +217,21 @@ def get_llm(model: str, **kwargs):
     All LLM call sites should use this helper instead of constructing
     ChatOpenAI directly.  On a corporate machine the custom http_client
     is injected; on the grader's machine it is omitted.
+
+    For models that default to "thinking" mode (e.g. Qwen3.5), we inject
+    chat_template_kwargs to disable it — thinking wastes tokens in
+    tool-calling flows where we need direct responses.
     """
     from langchain_openai import ChatOpenAI
 
     http_client = get_http_client()
     extra = {"http_client": http_client} if http_client else {}
+
+    if model in _THINKING_MODELS:
+        eb = kwargs.pop("extra_body", {})
+        eb.setdefault("chat_template_kwargs", {})["enable_thinking"] = False
+        kwargs["extra_body"] = eb
+
     return ChatOpenAI(
         base_url=NEBIUS_BASE_URL,
         api_key=NEBIUS_API_KEY,
@@ -199,7 +305,36 @@ def get_summarizer_model() -> str:
     return SUMMARIZER_STRATEGY
 
 
+# --- Mem0 Configuration ---
+
+MEM0_CONFIG: dict = {
+    "llm": {
+        "provider": "openai",
+        "config": {
+            "model": MEM0_LLM_MODEL,
+            "api_key": NEBIUS_API_KEY,
+            "openai_base_url": NEBIUS_BASE_URL,
+        },
+    },
+    "embedder": {
+        "provider": "openai",
+        "config": {
+            "model": EMBEDDING_MODEL,
+            "api_key": NEBIUS_API_KEY,
+            "openai_base_url": NEBIUS_BASE_URL,
+        },
+    },
+    "vector_store": {
+        "provider": "qdrant",
+        "config": {
+            "path": str(MEM0_DATA_DIR),
+            "embedding_model_dims": 4096,
+        },
+    },
+    "history_db_path": str(MEM0_DATA_DIR / "history.db"),
+}
+
 # --- Ensure directories exist ---
 
-PROFILES_DIR.mkdir(exist_ok=True)
+MEM0_DATA_DIR.mkdir(exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)

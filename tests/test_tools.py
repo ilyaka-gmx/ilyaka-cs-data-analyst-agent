@@ -149,13 +149,31 @@ def test_summarize_responses_invalid_category():
 # --- Tools 8-9: remember_fact + recall_profile ---
 
 
-def test_remember_and_recall(tmp_path, monkeypatch):
-    """Test memory tools with a temporary profile directory."""
-    import src.config
+def test_remember_and_recall(monkeypatch):
+    """Test memory tools with a mocked mem0 backend."""
     import src.memory
 
-    monkeypatch.setattr(src.config, "PROFILES_DIR", tmp_path)
-    monkeypatch.setattr(src.memory, "PROFILES_DIR", tmp_path)
+    _store: dict[str, list[dict]] = {}
+
+    def mock_add(text, user_id=None, **kw):
+        _store.setdefault(user_id, []).append({"memory": text, "id": str(len(_store.get(user_id, [])))})
+        return {"results": [{"event": "ADD", "memory": text}]}
+
+    def mock_get_all(filters=None, **kw):
+        uid = (filters or {}).get("user_id", "default")
+        return {"results": _store.get(uid, [])}
+
+    def mock_search(query, filters=None, **kw):
+        uid = (filters or {}).get("user_id", "default")
+        return {"results": [m for m in _store.get(uid, []) if query.lower() in m["memory"].lower()]}
+
+    class MockMemory:
+        add = staticmethod(mock_add)
+        get_all = staticmethod(mock_get_all)
+        search = staticmethod(mock_search)
+        delete_all = staticmethod(lambda **kw: None)
+
+    monkeypatch.setattr(src.memory, "_memory", MockMemory())
 
     set_current_user_id("test_user")
 
@@ -168,8 +186,35 @@ def test_remember_and_recall(tmp_path, monkeypatch):
     result = recall_profile.invoke({})
     assert "refund data" in result.lower()
 
-    result = remember_fact.invoke({"fact": "User likes refund data"})
-    assert "already" in result.lower()
+
+def test_recall_profile_semantic_search(monkeypatch):
+    """Test recall_profile with a query parameter for semantic search."""
+    import src.memory
+
+    _store = {"search_user": [
+        {"memory": "Interested in refund data"},
+        {"memory": "Works as a data analyst"},
+        {"memory": "Prefers concise answers"},
+    ]}
+
+    def mock_search(query, filters=None, **kw):
+        uid = (filters or {}).get("user_id", "default")
+        return {"results": [m for m in _store.get(uid, []) if query.lower() in m["memory"].lower()]}
+
+    class MockMemory:
+        search = staticmethod(mock_search)
+        get_all = staticmethod(lambda filters=None, **kw: {"results": _store.get((filters or {}).get("user_id", "default"), [])})
+
+    monkeypatch.setattr(src.memory, "_memory", MockMemory())
+
+    set_current_user_id("search_user")
+
+    result = recall_profile.invoke({"query": "refund"})
+    assert "refund" in result.lower()
+
+    result = recall_profile.invoke({})
+    assert "refund" in result.lower()
+    assert "analyst" in result.lower()
 
 
 # --- DatasetMetadata ---

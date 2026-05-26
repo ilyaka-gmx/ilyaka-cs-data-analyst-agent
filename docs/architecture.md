@@ -25,11 +25,12 @@
 10. [Web Frontend Architecture](#10-web-frontend-architecture)
 11. [Testing](#11-testing)
 12. [Technology Decisions](#12-technology-decisions)
-13. [Roadmap](#13-roadmap)
+13. [Models Observation](#13-models-observation) → [models-observation.md](models-observation.md)
+14. [Roadmap](#14-roadmap)
 
 ## 1. Overview
 
-This project is a LangGraph-based ReAct agent that answers structured and unstructured questions about the Bitext Customer Service dataset (26,872 rows, 11 categories, 27 intents). The agent classifies queries via a dedicated router model, uses 11 typed tools with Pydantic schemas, persists conversations via SQLite checkpointing, maintains per-user profiles as JSON files, and exposes data tools through an MCP server. A cross-model quality judge (using a different LLM family) evaluates each response. All LLM inference goes through Nebius Token Factory.
+This project is a LangGraph-based ReAct agent that answers structured and unstructured questions about the Bitext Customer Service dataset (26,872 rows, 11 categories, 27 intents). The agent classifies queries via a dedicated router model, uses 11 typed tools with Pydantic schemas, persists conversations via SQLite checkpointing, maintains per-user semantic memory via [mem0](https://github.com/mem0ai/mem0) (Qdrant vector store + LLM-based fact extraction), and exposes data tools through an MCP server. A cross-model quality judge (using a different LLM family) evaluates each response. All LLM inference goes through Nebius Token Factory.
 
 The solution is built on LangGraph with a manual ReAct loop (rather than the built-in `create_agent`) to maintain full control over loop detection, iteration limits, and malformed tool-call repair. LangChain's `AgentMiddleware` system provides composable hooks for token tracking and tool timing. Three UI entry points — CLI, custom HTML frontend, and Streamlit — share the same agent graph and middleware backend.
 
@@ -53,22 +54,26 @@ graph TD
         direction TB
         MW["Middleware Harness<br/>TokenTracking · ToolTiming"]
         Router["Router<br/>(Qwen3-30B)"]
+        Decompose["Decompose<br/>(query planning)"]
         AgentStep["Agent ReAct Loop<br/>(Qwen3-235B)"]
         ToolStep["Tool Step<br/>(ToolNode)"]
+        Reflect["Reflect<br/>(self-check)"]
         Decline["Decline Node<br/>(static message)"]
 
-        Router -->|structured<br/>unstructured<br/>recommend| AgentStep
+        Router -->|structured<br/>unstructured<br/>recommend| Decompose
+        Decompose --> AgentStep
         Router -->|out_of_scope| Decline
         AgentStep <-->|tool_calls| ToolStep
+        AgentStep -->|text response| Reflect
     end
 
     Core --> ToFa[("Nebius Token<br/>Factory")]
     Core --> SQLite[("checkpoints.db<br/>(SqliteSaver)")]
-    Core --> Profiles[("profiles/<br/>{user}.json")]
+    Core --> Mem0[("mem0_data/<br/>Qdrant + history.db")]
     Core -.->|MCP clients| MCP["MCP Server<br/>(FastMCP, 7 tools)"]
 ```
 
-Three UI entry points share one agent graph. The graph calls Nebius Token Factory for all LLM inference (agent, router, judge, summarizer), persists conversations in SQLite, and stores user profiles as JSON files.
+Three UI entry points share one agent graph. The graph calls Nebius Token Factory for all LLM inference (agent, router, judge, summarizer, mem0 fact extraction), persists conversations in SQLite, and stores user semantic memory via mem0 (Qdrant vector store on local disk).
 
 External MCP clients can also access the 7 data tools via `src/mcp_server.py` (FastMCP, stdio transport).
 
@@ -83,7 +88,7 @@ src/
 ├── agent.py           ← LangGraph StateGraph: router → agent_step ↔ tool_step → END
 ├── tools.py           ← 11 LangChain tools with Pydantic schemas
 ├── toon.py            ← TOON output formatter (token-efficient tabular format)
-├── memory.py          ← UserProfile CRUD (thread-safe, atomic file writes)
+├── memory.py          ← Semantic memory via mem0 (fact extraction, vector recall)
 ├── middleware.py       ← TokenTrackingMiddleware + ToolTimingMiddleware
 ├── session_store.py    ← Chat metadata, per-query traces, JSON persistence
 ├── quality.py         ← Cross-model judge (JUDGE_MODEL scores responses)
@@ -97,7 +102,20 @@ Entry points:
 ├── api_server.py      ← FastAPI backend (REST + SSE for web frontend)
 ├── streamlit_app.py   ← Streamlit UI (legacy fallback)
 └── frontend/
-    └── index.html     ← Single-file SPA (HTML/CSS/JS, no build step)
+    ├── index.html     ← Lean HTML shell (no inline JS/CSS)
+    ├── styles.css     ← All CSS (theme, layout, components)
+    └── js/            ← Modular JS (shared App namespace, no build step)
+        ├── state.js   ← App namespace, config, state vars, DOM refs
+        ├── theme.js   ← Theme switching (System/Light/Dark)
+        ├── user.js    ← User combo-box
+        ├── tabs.js    ← Tab switching, feature toggles
+        ├── chatlist.js← Chat list, search, filtering
+        ├── tags.js    ← Tag management (auto + manual)
+        ├── chat.js    ← SSE communication, message rendering
+        ├── admin.js   ← Admin panel, model selector
+        ├── memory.js  ← Memory Insights dashboard
+        ├── quality.js ← Judge card rendering
+        └── statusbar.js ← Status bar, init
 ```
 
 ### Key dependencies between modules
@@ -124,15 +142,20 @@ flowchart TD
     Q["User Query"] --> Router["Router<br/>(Qwen3-30B)<br/>classify_query()"]
 
     Router -->|out_of_scope| Decline["Decline Node<br/>(static message,<br/>no LLM call)"]
-    Router -->|structured / unstructured / recommend| AgentStep["Agent Step<br/>(Qwen3-235B)"]
+    Router -->|structured / unstructured / recommend| Decompose["Decompose Step<br/>(query planning)"]
+
+    Decompose -->|plan injected<br/>into system prompt| AgentStep["Agent Step<br/>(Qwen3-235B)"]
 
     AgentStep -->|has tool_calls| ToolStep["Tool Step<br/>(ToolNode +<br/>ToolTimingMiddleware)"]
-    AgentStep -->|text response| Done["END<br/>(return answer)"]
+    AgentStep -->|text response| Reflect["Reflect Step<br/>(self-check)"]
 
     ToolStep --> LoopCheck{"Loop detection:<br/>same tool+args twice?"}
     LoopCheck -->|no| AgentStep
     LoopCheck -->|yes| ForceText["Force text response<br/>(no tools bound)"]
-    ForceText --> Done
+    ForceText --> Reflect
+
+    Reflect -->|"pass"| Done["END<br/>(return answer)"]
+    Reflect -->|"retry (once)"| AgentStep
 
     AgentStep -->|iteration ≥ 12| Fallback["Graceful fallback<br/>message"]
     Fallback --> Done
@@ -160,7 +183,7 @@ Middleware hooks are called explicitly rather than through `create_agent`'s inte
 
 ## 5. Tools
 
-11 tools, dynamically exposed based on router classification:
+11 tools, dynamically exposed based on router classification. Each tool's docstring uses enriched WHAT/WHY/WHEN annotations that guide the LLM on when to use each tool, what to expect, and recommended fallback strategies (see "Tool Definition Enrichment" below):
 
 | # | Tool | Type | Description |
 |---|------|------|-------------|
@@ -172,7 +195,7 @@ Middleware hooks are called explicitly rather than through `create_agent`'s inte
 | 6 | `search_instructions` | data | Keyword search in customer text (TOON format) |
 | 7 | `summarize_responses` | analysis | LLM-powered summary of agent responses for a category/intent |
 | 8 | `remember_fact` | memory | Append a distilled fact to the user's profile |
-| 9 | `recall_profile` | memory | Read the user's stored profile facts |
+| 9 | `recall_profile` | memory | Read the user's stored profile facts (supports optional semantic search query) |
 | 10 | `update_profile` | memory | Replace entire profile after user confirmation |
 | 11 | `recall_past_sessions` | memory | Search session history for past queries and tools used |
 
@@ -193,6 +216,37 @@ The router classification determines which tools the LLM sees on each call. This
 
 Memory tools (8–11) are excluded because they require a user ID from `contextvars.ContextVar`, which MCP clients don't provide.
 
+### Tool definition enrichment
+
+Standard tool docstrings describe *what* a tool does — but LLMs (especially open-source models) struggle to *select the right tool* and *recover from empty results*. Enriched docstrings add structured guidance:
+
+- **WHEN**: precise trigger conditions ("User asks 'how many'...")
+- **NOT FOR**: disambiguation ("...use get_distribution instead")
+- **STRATEGY/FALLBACK**: multi-step recovery when initial results are empty ("if search_instructions returns nothing, try list_intents on related categories")
+- **COST**: relative expense ("this tool makes an LLM call internally")
+- **TIP**: usage patterns ("filter by intent is more precise than by category")
+
+This is particularly important for `search_instructions`, which performs literal substring matching — a common pitfall where the LLM assumes semantic search capability. The enriched docstring explicitly teaches the agent the fallback chain: try shorter keywords → try synonyms → switch to `list_intents` → use `get_examples`.
+
+### Query decomposition
+
+A pre-execution planning step that uses the cheap router model (Qwen3-30B) to decompose ambiguous queries before the agent's ReAct loop begins.
+
+**Problem**: open-source agent models often give up after a single failed search, responding with "I couldn't find data about X" instead of trying alternative keywords, exploring related intents, or reformulating the query.
+
+**Solution**: a `decompose` graph node runs between the router and agent_step:
+
+1. The router classifies the query
+2. The decompose node generates a step-by-step plan (e.g., "search for 'delivery', 'track', 'shipping' → check ORDER intents → pull examples")
+3. The plan is injected into the agent's system prompt as a `QUERY PLAN` section
+4. The agent follows the plan during its ReAct loop
+
+**Guard rails**:
+- Skipped for short queries (≤ 4 words) — direct factual questions don't need planning
+- Skipped for `out_of_scope` and `recommend` query types
+- Uses the cheap router model ($0.10/$0.30 per 1M tokens), not the expensive agent model
+- Toggleable via `ENABLE_DECOMPOSITION` env var and frontend UI toggle
+
 ## 6. Memory Architecture
 
 The agent uses four memory layers, following the standard classification from cognitive science (as applied to LLM agents):
@@ -200,9 +254,9 @@ The agent uses four memory layers, following the standard classification from co
 | | **Short-term (Working)** | **Episodic** | **Semantic** | **Procedural** |
 |---|---|---|---|---|
 | **What** | Active conversation context for the current thread | Records of past interactions: queries asked, tools used, durations, quality scores | Distilled facts about users: name, role, interests, preferences | Aggregated usage patterns: tool frequency, query type distribution |
-| **Storage** | `checkpoints.db` (SqliteSaver) | `session_store.json` | `profiles/{user}.json` | Computed on demand from session store |
+| **Storage** | `checkpoints.db` (SqliteSaver) | `session_store.json` | `mem0_data/` (Qdrant vectors + `history.db`) via [mem0](https://github.com/mem0ai/mem0) | Computed on demand from session store |
 | **Scope** | Per-thread; lost on new session | Cross-thread; retained across all sessions | Cross-thread; retained indefinitely | Cross-thread; retained |
-| **Access** | Automatic via LangGraph checkpointer | `recall_past_sessions` tool, Admin tab | `remember_fact`, `recall_profile`, `update_profile` | `/api/memory` endpoint, Memory Insights tab |
+| **Access** | Automatic via LangGraph checkpointer | `recall_past_sessions` tool, Admin tab | `remember_fact`, `recall_profile` (with semantic search), `update_profile` | `/api/memory` endpoint, Memory Insights tab |
 
 ### Short-term (working) memory
 
@@ -223,10 +277,10 @@ The agent uses four memory layers, following the standard classification from co
 ### Semantic memory
 
 - **What**: distilled, stable facts about the user (name, role, interests, preferences) — extracted from conversation by the agent's deliberate use of the `remember_fact` tool
-- **Storage**: `profiles/{user_id}.json` — a Pydantic `UserProfile` with a `facts[]` list
-- **Scope**: cross-session, per user. Survives indefinitely.
-- **Access**: `remember_fact` (write), `recall_profile` (read), `update_profile` (replace)
-- **Safety**: `threading.Lock` on `add_fact()` for serialized read-modify-write; atomic writes via `tempfile.NamedTemporaryFile` + `Path.replace()` to prevent corruption
+- **Storage**: `mem0_data/` — [mem0](https://github.com/mem0ai/mem0) with Qdrant in-process vector store on local disk. Mem0 uses a dedicated LLM (`MEM0_LLM_MODEL`, default Qwen3-30B) for fact extraction and normalization, and an embedding model (`EMBEDDING_MODEL`, default `Qwen/Qwen3-Embedding-8B`) for vectorization. Both run on Nebius Token Factory using the same API key as the agent.
+- **Scope**: cross-session, per user. Survives indefinitely. `user_id` is a metadata filter in the vector store — no explicit user creation needed.
+- **Access**: `remember_fact` (write — mem0 handles deduplication and normalization), `recall_profile` (read — supports optional `query` parameter for semantic search), `update_profile` (replace — deletes all, then re-adds)
+- **Key benefit over v1**: semantic deduplication (mem0's LLM detects and merges overlapping facts), embedding-based recall (find relevant facts by meaning, not exact match), and automatic fact normalization
 
 ### Procedural memory
 
@@ -333,12 +387,17 @@ flowchart LR
     end
 ```
 
-The frontend is a single-file SPA (~1,865 lines of HTML/CSS/JS). No build step, no framework dependencies. Features:
+The frontend is a modular SPA split across `index.html` (lean shell), `styles.css`, and 11 JS modules under `js/`. No build step, no framework dependencies — modules share a global `App` namespace. Cache-busting version parameters on all `<link>` and `<script>` tags ensure fresh loads after updates.
 
-- **Chat tab**: SSE streaming with expandable reasoning steps, suggestion chips, per-query footer (tokens, duration, tools), memory trace badges, judge card
-- **Admin tab**: per-query execution traces, session delete, bulk cleanup
-- **Memory Insights tab**: 4-panel dashboard (Short-term/Episodic/Semantic/Procedural)
-- **Sidebar**: user picker (combo-box), conversation list with search, theme selector (System/Light/Dark)
+Features:
+
+- **Chat tab**: SSE streaming with expandable reasoning steps (including decomposition plan), suggestion chips, per-query footer (tokens, duration, tools), memory trace badges, judge card
+- **Admin tab**: per-query execution traces, model selector with live cost display, session delete, bulk cleanup
+- **Memory Insights tab**: 4-panel dashboard (Short-term/Episodic/Semantic/Procedural) with mem0 health status and backend metrics
+- **Sidebar**: user picker (combo-box), conversation list with search and filtering, tag management (auto + manual), theme selector (System/Light/Dark)
+- **Settings toggles**: past sessions, quality scoring, agent reflection, query decomposition
+- **Status bar**: active model, dataset stats, token/cost counters
+- **Model selector**: browse available Nebius Token Factory models with quality ratings, pros/cons, and per-token pricing (input/output separately); apply changes at runtime without restart
 
 ### SSE event flow
 
@@ -349,6 +408,7 @@ sequenceDiagram
 
     B->>S: POST /api/chat
     S-->>B: event: route {query_type: "structured"}
+    S-->>B: event: decompose {plan: "1. Search for..."} (if enabled)
     S-->>B: event: tool_call {name: "count_rows", args: {...}}
     S-->>B: event: tool_result {name: "count_rows", content: "Found 2,992 rows..."}
     S-->>B: event: answer {text: "...", tokens: {...}, duration_ms: ...}
@@ -388,7 +448,7 @@ Tests marked `@pytest.mark.slow` call real LLMs and require a valid API key. Fas
 | **Middleware pattern** | LangChain `AgentMiddleware` subclasses (`langchain>=1.3.0`) | Native, composable, typed request/response objects. Hooks called explicitly because we own the ReAct loop. |
 | **Tool output format** | TOON | 30–60% token reduction for tabular data vs JSON. Validated in connectivity tests that models correctly parse TOON. |
 | **Memory pattern** | Memory as tools (agent calls `remember_fact` when relevant) | Agent decides when to save; zero token overhead on turns without personal info. Alternative (background extraction on every turn) wastes tokens. |
-| **Profile storage** | JSON files per user | Simple, human-readable, grader-inspectable. No DB dependency beyond SQLite. A production system would use a proper store (see Roadmap). |
+| **Profile storage** | Mem0 with Qdrant in-process | LLM-based fact extraction with semantic deduplication and embedding-based recall. Qdrant runs in-process (local disk) — no external service dependency. |
 | **Conversation persistence** | `SqliteSaver` | File-based, survives restarts, no external DB needed. Single-writer limitation acceptable for POC. |
 | **Web UI** | Custom HTML/CSS/JS SPA + FastAPI | Full UI/UX control: SSE streaming, Memory Insights dashboard, theme selector. No build step. Chainlit was dropped (abandoned project, CVEs). Streamlit retained as fallback. |
 | **Tool input bounds** | Pydantic `Field(ge=, le=)` on schemas | Validation runs before the tool function body; a separate middleware would be redundant. |
@@ -398,7 +458,11 @@ Tests marked `@pytest.mark.slow` call real LLMs and require a valid API key. Fas
 | **Summarizer model** | Configurable via `SUMMARIZER_STRATEGY` env var | Default "economy" picks cheapest available model via live `/v1/models?verbose=true` pricing. |
 | **MCP server** | FastMCP v3 with thin wrappers delegating to LangChain tools | Reuses existing tested implementations; `.invoke()` ensures identical behavior. Memory tools excluded (need agent-level user context). |
 
-## 13. Roadmap
+## 13. Models Observation
+
+See [models-observation.md](models-observation.md) for a detailed analysis of the quality gap between open-source and frontier models in agentic settings, what approaches we tried (prompt tuning, reflection, judge scoring, decomposition + tool enrichment), which ones worked, and a further improvements roadmap.
+
+## 14. Roadmap
 
 Known limitations of this POC and points for future development.
 
@@ -408,7 +472,7 @@ Known limitations of this POC and points for future development.
 |---|---|---|
 | **Database** | `SqliteSaver` — single-writer, file-based, no concurrent access | `PostgresSaver` with connection pooling. Enables concurrent requests, horizontal scaling, and proper backup. |
 | **Session store** | JSON file (`session_store.json`) — single-process, no locking | Database-backed store (PostgreSQL or LangGraph `BaseStore`). |
-| **Profile storage** | JSON files in `profiles/` | Database-backed with versioning, or LangGraph `BaseStore` with semantic search via embeddings (e.g., `Qwen3-Embedding-8B` on Token Factory). |
+| **Semantic memory** | Mem0 with Qdrant in-process (local disk at `mem0_data/`) | PostgreSQL with pgvector — consolidate checkpoints, session store, and semantic memory in a single database for scalability, backup, and concurrent access. |
 | **Web server** | Single-process FastAPI with `threading.Lock` | Multi-worker deployment (Gunicorn + Uvicorn workers) behind a reverse proxy. |
 | **Authentication** | None — user ID is client-supplied | OAuth/OIDC or API key authentication. |
 | **SSE streaming** | Batched after graph completion | True per-token streaming using LangGraph `astream_events()`. |
@@ -418,7 +482,7 @@ Known limitations of this POC and points for future development.
 | Improvement | Description |
 |---|---|
 | **LLM-based conversation summarization** | Replace message trimming with `SummarizationMiddleware` or a custom summarizer node for long conversations where early context matters. |
-| **Semantic memory via Mem0** | Replace JSON profiles with [Mem0](https://github.com/mem0ai/mem0) for automatic memory extraction, semantic deduplication, and embedding-based recall. |
+| **PostgreSQL consolidation** | Replace SQLite (checkpoints), JSON (session store), and Qdrant in-process (mem0) with a single PostgreSQL instance using `PostgresSaver`, pgvector for embeddings, and table-backed session storage. Simplifies deployment, enables concurrent access, and provides unified backup. |
 | **Episodic memory compaction** | Periodically summarize old `QueryTrace` records to prevent unbounded growth of `session_store.json`. |
 | **Procedural memory as agent behavior** | Extend procedural memory from observational (tool counts) to behavioral — e.g., "this user prefers concise tables over prose" influencing the system prompt. |
 

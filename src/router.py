@@ -59,7 +59,7 @@ def classify_query(user_message: str) -> RouterOutput:
     Returns:
         RouterOutput with classification and reasoning.
     """
-    llm = get_llm(ROUTER_MODEL, temperature=0, max_tokens=150)
+    llm = get_llm(ROUTER_MODEL, temperature=0, max_tokens=400)
     messages = [
         SystemMessage(content=ROUTER_SYSTEM_PROMPT),
         HumanMessage(content=user_message),
