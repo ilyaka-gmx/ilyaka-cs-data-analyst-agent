@@ -15,6 +15,7 @@ combined_ca_bundle.pem
 checkpoints.db
 profiles/
 session_store.json
+uv.lock
 
 # Backup convention (per SKILL.md)
 _backup/
