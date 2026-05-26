@@ -44,6 +44,7 @@ echo 'NEBIUS_API_KEY=<key>' >> .env
 ```bash
 uv run pytest tests/test_tools.py tests/test_ui.py tests/test_quality.py tests/test_mcp.py -q
 ```
+If any tests fail with SSL errors, see [SSL / Corporate Proxy](#ssl--corporate-proxy-zscaler-case) before retrying.
 
 **Step 5 — Health check (needs the API key from step 1):**
 ```bash
