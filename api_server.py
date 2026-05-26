@@ -24,17 +24,15 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.agent import build_graph, token_tracker, tool_timer
+import src.config as cfg
 from src.config import (
-    AGENT_MODEL,
     CHECKPOINTS_DB,
     ENABLE_QUALITY_SCORING,
-    JUDGE_MODEL,
-    PROFILES_DIR,
     estimate_cost,
 )
 from src.data import metadata
 from src.health import run_startup_checks
-from src.memory import load_profile
+from src.memory import delete_user_memories, get_all_memories_raw, get_storage_metrics
 from src.recommender import get_recommendations
 from src.session_store import QueryTrace, store
 from src.ui_helpers import suggest_tags
@@ -162,9 +160,11 @@ async def chat(request: Request):
     store.update_chat_title(session_id, query)
 
     def event_stream():
+        from src.config import RECURSION_LIMIT
+
         config = {
             "configurable": {"thread_id": session_id},
-            "recursion_limit": 12,
+            "recursion_limit": RECURSION_LIMIT,
         }
 
         token_tracker.reset_query()
@@ -189,7 +189,7 @@ async def chat(request: Request):
                     stream_mode="updates",
                 ):
                     for node_name, node_output in event.items():
-                        if node_name == "__end__":
+                        if node_name == "__end__" or not node_output:
                             continue
 
                         if "query_type" in node_output:
@@ -198,6 +198,16 @@ async def chat(request: Request):
                             reasoning_steps.append(step)
                             sse_events.append(
                                 f"event: route\ndata: {json.dumps(step)}\n\n"
+                            )
+
+                        if "decomposition_plan" in node_output and node_output["decomposition_plan"]:
+                            step = {
+                                "type": "decompose",
+                                "plan": node_output["decomposition_plan"],
+                            }
+                            reasoning_steps.append(step)
+                            sse_events.append(
+                                f"event: decompose\ndata: {json.dumps(step)}\n\n"
                             )
 
                         for msg in node_output.get("messages", []):
@@ -275,12 +285,12 @@ async def chat(request: Request):
             if s.get("type") == "tool_call"
             and s.get("name") in ("remember_fact", "recall_profile")
         ]
-        profile = load_profile(user_id)
+        user_memories = get_all_memories_raw(user_id)
 
         memory_ops = {
             "semantic_tools": semantic_ops,
-            "has_profile": bool(profile.facts),
-            "profile_fact_count": len(profile.facts),
+            "has_profile": bool(user_memories),
+            "profile_fact_count": len(user_memories),
             "context_messages": context_msgs,
         }
 
@@ -523,14 +533,13 @@ def admin_stats():
         user_ids.add(uid)
         sessions_per_user[uid] = sessions_per_user.get(uid, 0) + 1
 
-    for p in PROFILES_DIR.glob("*.json"):
-        user_ids.add(p.stem)
-
-    profile_count = sum(1 for _ in PROFILES_DIR.glob("*.json"))
+    profile_count = 0
     total_facts = 0
-    for p in PROFILES_DIR.glob("*.json"):
-        profile = load_profile(p.stem)
-        total_facts += len(profile.facts)
+    for uid in list(user_ids):
+        memories = get_all_memories_raw(uid)
+        if memories:
+            profile_count += 1
+            total_facts += len(memories)
 
     total_queries = sum(c.query_count for c in store.chats.values())
 
@@ -557,10 +566,10 @@ def admin_stats():
                 ).get("total", 0)
 
     agent_cost = estimate_cost(
-        AGENT_MODEL, token_tracker.total_prompt_tokens,
+        cfg.AGENT_MODEL, token_tracker.total_prompt_tokens,
         token_tracker.total_completion_tokens,
     )
-    judge_cost = estimate_cost(JUDGE_MODEL, 0, 0)
+    judge_cost = estimate_cost(cfg.JUDGE_MODEL, 0, 0)
     if scored_count > 0:
         jt = {"prompt": 0, "completion": 0}
         for chat in store.chats.values():
@@ -568,7 +577,7 @@ def admin_stats():
                 jt_q = q.quality_score.get("judge_tokens", {})
                 jt["prompt"] += jt_q.get("prompt", 0)
                 jt["completion"] += jt_q.get("completion", 0)
-        judge_cost = estimate_cost(JUDGE_MODEL, jt["prompt"], jt["completion"])
+        judge_cost = estimate_cost(cfg.JUDGE_MODEL, jt["prompt"], jt["completion"])
 
     return {
         "total_users": len(user_ids),
@@ -588,8 +597,98 @@ def admin_stats():
         "costs": {
             "agent": round(agent_cost, 6),
             "judge": round(judge_cost, 6),
+            "agent_tokens": {
+                "prompt": token_tracker.total_prompt_tokens,
+                "completion": token_tracker.total_completion_tokens,
+                "total": agent_total_tokens,
+            },
+            "judge_tokens": {
+                "total": judge_total_tokens,
+            },
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# API: Model selector (catalog + runtime switching)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/models")
+def get_models():
+    """Return the model catalog and current selections."""
+    from src.model_catalog import AGENT_MODELS, JUDGE_MODELS
+
+    return {
+        "agent_models": AGENT_MODELS,
+        "judge_models": JUDGE_MODELS,
+        "current_agent": cfg.AGENT_MODEL,
+        "current_judge": cfg.JUDGE_MODEL,
+    }
+
+
+@app.post("/api/models")
+async def set_models(request: Request):
+    """Apply model selection and persist."""
+    from src.config import set_agent_model, set_judge_model
+    from src.model_catalog import AGENT_MODEL_IDS, JUDGE_MODEL_IDS
+
+    body = await request.json()
+    agent_id = body.get("agent_model")
+    judge_id = body.get("judge_model")
+
+    errors = []
+    if agent_id:
+        if agent_id not in AGENT_MODEL_IDS:
+            errors.append(f"Unknown agent model: {agent_id}")
+        else:
+            set_agent_model(agent_id)
+
+    if judge_id:
+        if judge_id not in JUDGE_MODEL_IDS:
+            errors.append(f"Unknown judge model: {judge_id}")
+        else:
+            set_judge_model(judge_id)
+
+    if errors:
+        return JSONResponse({"errors": errors}, status_code=400)
+
+    return {
+        "ok": True,
+        "agent_model": cfg.AGENT_MODEL,
+        "judge_model": cfg.JUDGE_MODEL,
+    }
+
+
+# ---------------------------------------------------------------------------
+# API: Reflection toggle
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/reflection")
+async def set_reflection(request: Request):
+    body = await request.json()
+    cfg.ENABLE_REFLECTION = bool(body.get("enabled", True))
+    log.info("Reflection set to %s", cfg.ENABLE_REFLECTION)
+    return {"ok": True, "enabled": cfg.ENABLE_REFLECTION}
+
+
+@app.get("/api/reflection")
+def get_reflection():
+    return {"enabled": cfg.ENABLE_REFLECTION}
+
+
+@app.post("/api/decomposition")
+async def set_decomposition(request: Request):
+    body = await request.json()
+    cfg.ENABLE_DECOMPOSITION = bool(body.get("enabled", True))
+    log.info("Decomposition set to %s", cfg.ENABLE_DECOMPOSITION)
+    return {"ok": True, "enabled": cfg.ENABLE_DECOMPOSITION}
+
+
+@app.get("/api/decomposition")
+def get_decomposition():
+    return {"enabled": cfg.ENABLE_DECOMPOSITION}
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +711,7 @@ def all_tags(user_id: str | None = Query(default=None)):
 @app.get("/api/meta")
 def meta():
     agent_cost = estimate_cost(
-        AGENT_MODEL,
+        cfg.AGENT_MODEL,
         token_tracker.total_prompt_tokens,
         token_tracker.total_completion_tokens,
     )
@@ -625,7 +724,7 @@ def meta():
             judge_tokens["completion"] += jt.get("completion", 0)
             judge_tokens["total"] += jt.get("total", 0)
     judge_cost = estimate_cost(
-        JUDGE_MODEL, judge_tokens["prompt"], judge_tokens["completion"]
+        cfg.JUDGE_MODEL, judge_tokens["prompt"], judge_tokens["completion"]
     )
 
     return {
@@ -634,8 +733,8 @@ def meta():
             "num_categories": metadata.num_categories,
             "num_intents": metadata.num_intents,
         },
-        "model": AGENT_MODEL,
-        "model_short": AGENT_MODEL.split("/")[-1],
+        "model": cfg.AGENT_MODEL,
+        "model_short": cfg.AGENT_MODEL.split("/")[-1],
         "tokens": {
             "prompt": token_tracker.total_prompt_tokens,
             "completion": token_tracker.total_completion_tokens,
@@ -646,8 +745,8 @@ def meta():
             "cost": round(agent_cost, 6),
         },
         "judge": {
-            "model": JUDGE_MODEL,
-            "model_short": JUDGE_MODEL.split("/")[-1],
+            "model": cfg.JUDGE_MODEL,
+            "model_short": cfg.JUDGE_MODEL.split("/")[-1],
             "tokens": judge_tokens,
             "cost": round(judge_cost, 6),
         },
@@ -660,8 +759,6 @@ def list_users():
     for chat in store.chats.values():
         if chat.user_id and chat.user_id != "default":
             user_ids.add(chat.user_id)
-    for p in PROFILES_DIR.glob("*.json"):
-        user_ids.add(p.stem)
     return {"users": sorted(user_ids)}
 
 
@@ -676,11 +773,13 @@ def delete_all_users():
             _conn.commit()
     except Exception:
         pass
-    profile_count = 0
-    for p in PROFILES_DIR.glob("*.json"):
-        p.unlink(missing_ok=True)
-        profile_count += 1
-    return {"ok": True, "profiles_deleted": profile_count}
+    user_ids: set[str] = set()
+    for chat in store.chats.values():
+        if chat.user_id and chat.user_id != "default":
+            user_ids.add(chat.user_id)
+    for uid in user_ids:
+        delete_user_memories(uid)
+    return {"ok": True, "profiles_deleted": len(user_ids)}
 
 
 @app.delete("/api/users/{user_id}")
@@ -699,13 +798,11 @@ def delete_user(user_id: str):
             _conn.commit()
     except Exception:
         pass
-    profile_path = PROFILES_DIR / f"{user_id}.json"
-    if profile_path.exists():
-        profile_path.unlink(missing_ok=True)
+    delete_user_memories(user_id)
     return {
         "ok": True,
         "deleted_chats": len(deleted_chats),
-        "profile_deleted": not profile_path.exists(),
+        "profile_deleted": True,
     }
 
 
@@ -761,23 +858,45 @@ def memory_insights(session_id: str | None = Query(default=None)):
         "sessions": sessions_timeline,
     }
 
-    # -- Semantic memory: user profiles --
+    # -- Semantic memory: user profiles (mem0) --
+    from src.config import EMBEDDING_MODEL, MEM0_DATA_DIR, MEM0_LLM_MODEL
+
+    known_users: set[str] = set()
+    for chat in all_chats:
+        if chat.user_id and chat.user_id != "default":
+            known_users.add(chat.user_id)
     profiles_data = []
     total_facts = 0
-    for p in PROFILES_DIR.glob("*.json"):
-        profile = load_profile(p.stem)
-        facts = profile.facts
+    for uid in sorted(known_users):
+        memories = get_all_memories_raw(uid)
+        facts = [m.get("memory", str(m)) for m in memories]
         total_facts += len(facts)
         profiles_data.append({
-            "user_id": profile.user_id,
+            "user_id": uid,
             "fact_count": len(facts),
             "facts": facts,
-            "last_updated": profile.last_updated,
+            "last_updated": memories[0].get("updated_at", "") if memories else "",
         })
+    storage = get_storage_metrics()
     semantic = {
         "total_users": len(profiles_data),
         "total_facts": total_facts,
         "profiles": profiles_data,
+        "backend": {
+            "engine": "mem0",
+            "vector_store": "Qdrant (in-process)",
+            "llm_model": MEM0_LLM_MODEL,
+            "embedding_model": EMBEDDING_MODEL,
+            "storage_path": str(MEM0_DATA_DIR),
+            "storage_exists": MEM0_DATA_DIR.exists(),
+        },
+        "storage": {
+            "size_bytes": storage["storage_bytes"],
+            "size_display": storage["storage_display"],
+            "file_count": storage["file_count"],
+            "point_limit": storage["qdrant_point_limit"],
+            "utilization_pct": round(total_facts / storage["qdrant_point_limit"] * 100, 1),
+        },
     }
 
     # -- Procedural memory: tool usage + query type distribution --
@@ -863,4 +982,4 @@ app.mount(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, ws="none")

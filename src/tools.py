@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from src.config import get_llm, get_summarizer_model
 from src.data import CATEGORIES, CATEGORY_INTENT_MAP, INTENTS, dataset
-from src.memory import add_fact, get_facts, replace_facts
+from src.memory import add_fact, get_facts, replace_facts, search_facts
 from src.session_store import store
 from src.toon import to_toon
 
@@ -81,8 +81,12 @@ def _normalize_intent(intent: str) -> str:
 def list_categories() -> str:
     """List all unique categories in the Bitext customer service dataset.
 
-    Returns a comma-separated list of all 11 categories.
-    Use this when the user asks what categories or topics exist.
+    WHEN: User asks "what categories exist", "what topics are there", or
+    you need to discover available categories before filtering.
+    WHY: This is your starting point for exploring the dataset structure.
+    Call this before get_distribution or get_examples when you don't know
+    which categories exist.
+    RETURNS: Comma-separated list of all 11 categories (cached, zero cost).
     """
     return ", ".join(CATEGORIES)
 
@@ -102,8 +106,13 @@ class ListIntentsInput(BaseModel):
 def list_intents(category: Optional[str] = None) -> str:
     """List intents in the dataset, optionally filtered by category.
 
-    Use this to discover what specific intents exist, or what intents
-    belong to a particular category.
+    WHEN: Use to discover what specific intents exist under a category.
+    CRITICAL for free-text queries: if search_instructions returns empty
+    results, call list_intents on related categories to find intent names
+    that may match the user's concept (e.g., "late delivery" maps to
+    intents like track_order, delivery_period in the ORDER category).
+    Then use get_examples with the discovered intent to pull actual data.
+    RETURNS: Comma-separated intent names (cached when unfiltered).
     """
     if category is None:
         return ", ".join(INTENTS)
@@ -130,10 +139,12 @@ class CountRowsInput(BaseModel):
 def count_rows(
     category: Optional[str] = None, intent: Optional[str] = None
 ) -> str:
-    """Count the number of rows matching optional category and/or intent filters.
+    """Count rows matching optional category and/or intent filters.
 
-    Use this when the user asks 'how many' questions.
-    Returns the count as a number. Can filter by category, intent, or both.
+    WHEN: User asks "how many" or "count" questions.
+    NOT FOR: Distribution/breakdown/proportion questions — use
+    get_distribution instead.
+    RETURNS: A single count number with filter description.
     """
     df = dataset
     label_parts = []
@@ -178,9 +189,12 @@ def get_distribution(
 ) -> str:
     """Get the frequency distribution of categories or intents.
 
-    Use this when the user asks about distribution, breakdown, or proportions.
-    NOT for simple "how many" counts — use count_rows for that.
-    Returns counts sorted by frequency (descending), capped at top 15.
+    WHEN: User asks about distribution, breakdown, proportions, or "split".
+    NOT FOR: Simple "how many" counts — use count_rows for that.
+    TIP: Use filter_category to narrow intents to one category (e.g.,
+    "show intent breakdown for ORDER" → group_by='intent',
+    filter_category='ORDER').
+    RETURNS: Counts sorted by frequency (descending), capped at top 15.
     """
     if group_by not in ("category", "intent"):
         return "group_by must be 'category' or 'intent'."
@@ -222,9 +236,12 @@ def get_examples(
 ) -> str:
     """Get sample rows from the dataset.
 
-    Returns N random examples with their instruction, intent, and response.
-    Use this when the user asks to see examples or sample data.
-    Output is in TOON format for efficiency.
+    WHEN: User asks to "show me examples", "show data about X", or you
+    need concrete records after identifying relevant intents/categories.
+    STRATEGY: After discovering the right intent via list_intents or
+    search_instructions, call get_examples(intent='...') to pull
+    actual records. Filtering by intent is more precise than by category.
+    RETURNS: N random examples (instruction, intent, response) in TOON format.
     """
     df = dataset
 
@@ -269,10 +286,16 @@ class SearchInstructionsInput(BaseModel):
 def search_instructions(query: str, n: int = 5) -> str:
     """Search for customer instructions containing a keyword or phrase.
 
-    Use this when the user describes a topic in their own words,
-    e.g., 'people wanting their money back' or 'shipping problems'.
-    Performs case-insensitive substring search.
-    Output is in TOON format.
+    WHEN: User describes a topic in natural language (e.g., "people
+    wanting their money back", "shipping problems", "late delivery").
+    IMPORTANT: This is a LITERAL substring match, not semantic search.
+    If results are empty, the exact phrase is not in the data — try
+    shorter keywords, synonyms, or individual words. For example:
+    "late delivery" → try "delivery", "track", "shipping", "delay".
+    FALLBACK: If multiple search terms return nothing, switch strategy:
+    call list_intents on related categories to find matching intent
+    names, then use get_examples on those intents.
+    RETURNS: Matching rows (instruction, intent, category) in TOON format.
     """
     mask = dataset["instruction"].str.contains(query, case=False, na=False)
     matches = dataset[mask]
@@ -307,8 +330,13 @@ def summarize_responses(
 ) -> str:
     """Summarize how customer service agents typically respond to a category or intent.
 
-    Samples N responses from the dataset and uses an LLM to produce a summary.
-    Use this for open-ended questions about response patterns or agent behavior.
+    WHEN: User asks open-ended questions like "how do agents respond to
+    complaints?", "what's the typical tone for refund requests?", or
+    "summarize the FEEDBACK category".
+    COST: This tool makes an LLM call internally — more expensive than
+    data-only tools. Prefer get_examples first when the user just wants
+    to see data, not a qualitative summary.
+    RETURNS: An LLM-generated summary of response patterns and tone.
     """
     df = dataset
 
@@ -354,10 +382,12 @@ class RememberFactInput(BaseModel):
 
 @tool(args_schema=RememberFactInput)
 def remember_fact(fact: str) -> str:
-    """Save a fact about the user to their persistent profile.
+    """Save a durable fact about the user to their persistent profile.
 
-    Use this when the user shares personal information, preferences, or interests.
-    For example: their name, what topics they care about, or their role.
+    WHEN: User shares personal info — name, role, team, department,
+    location, long-term preferences, interests, likes, dislikes.
+    NOT FOR: Session-specific tasks ("I need a report"), one-time
+    requests, or transient deliverable preferences.
     """
     return add_fact(get_current_user_id(), fact)
 
@@ -365,14 +395,30 @@ def remember_fact(fact: str) -> str:
 # --- Tool 9: recall_profile ---
 
 
-@tool
-def recall_profile() -> str:
-    """Retrieve everything stored in the user's profile.
+class RecallProfileInput(BaseModel):
+    query: Optional[str] = Field(
+        None,
+        description="Optional semantic search query to find specific memories "
+        "(e.g., 'data interests', 'role'). When omitted, returns all "
+        "stored facts. Use a query when you need specific information "
+        "rather than the full profile.",
+    )
 
-    Use this when the user asks 'What do you know about me?' or
-    'What do you remember?'
+
+@tool(args_schema=RecallProfileInput)
+def recall_profile(query: Optional[str] = None) -> str:
+    """Retrieve the user's profile — all facts or semantically matching ones.
+
+    WHEN: User asks "what do you know about me?", "what do you remember?",
+    or you need to check for contradictions before remembering new facts.
+    Also call this before update_profile to see current state.
+    TIP: Use the query parameter for targeted recall (e.g., query='role')
+    instead of fetching the full profile when you only need one fact.
     """
-    return get_facts(get_current_user_id())
+    user_id = get_current_user_id()
+    if query:
+        return search_facts(user_id, query)
+    return get_facts(user_id)
 
 
 # --- Tool 10: update_profile ---
@@ -390,9 +436,12 @@ class UpdateProfileInput(BaseModel):
 def update_profile(facts: list[str]) -> str:
     """Replace the user's entire profile with the given list of facts.
 
-    Use this ONLY after the user has confirmed the proposed changes.
-    The agent must first recall_profile, propose the updated profile
-    in text, and wait for the user's approval before calling this tool.
+    WHEN: ONLY after the user has explicitly confirmed proposed changes.
+    NEVER call this without prior confirmation.
+    REQUIRED WORKFLOW: recall_profile → propose changes in text →
+    wait for user approval → update_profile with confirmed list.
+    WARNING: This is a destructive replace, not an append. Omitted
+    facts will be deleted.
     """
     return replace_facts(get_current_user_id(), facts)
 
@@ -429,10 +478,13 @@ def recall_past_sessions(
 ) -> str:
     """Retrieve summaries of the user's past chat sessions.
 
-    Use this when the user asks about their previous conversations,
-    wants to continue from where they left off, or asks what they
-    discussed before. Returns session IDs, titles, timestamps, and
-    the actual queries the user asked with tools that were used.
+    WHEN: User asks about previous conversations, wants to continue
+    from where they left off, or asks "what did we discuss?". Also
+    used in RECOMMENDATION MODE to ground suggestions in real history.
+    TIP: Use query_type_filter='structured' to skip recommendation
+    chats and find actual business questions. Use keyword to narrow
+    results (e.g., keyword='refund').
+    RETURNS: Session IDs, titles, timestamps, and actual queries asked.
     """
     user_id = get_current_user_id()
     user_chats = [

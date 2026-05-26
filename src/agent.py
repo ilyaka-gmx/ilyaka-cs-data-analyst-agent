@@ -32,9 +32,16 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from src.config import AGENT_MODEL, MAX_ITERATIONS, get_llm
+import src.config as cfg
+from src.config import MAX_ITERATIONS, get_llm
 from src.middleware import TokenTrackingMiddleware, ToolTimingMiddleware
-from src.prompts import AGENT_SYSTEM_PROMPT, DECLINE_MESSAGE
+from src.data import CATEGORIES, INTENTS
+from src.prompts import (
+    AGENT_SYSTEM_PROMPT,
+    DECLINE_MESSAGE,
+    DECOMPOSITION_PROMPT,
+    REFLECTION_PROMPT,
+)
 from src.router import classify_query
 from src.tools import get_all_tools, get_tools_for_query_type, set_current_user_id
 
@@ -53,8 +60,10 @@ class AgentState(MessagesState):
     query_type: Optional[Literal["structured", "unstructured", "recommend", "out_of_scope"]] = None
     user_id: str = "default"
     iteration_count: int = 0
+    reflection_count: int = 0
     use_past_sessions: bool = False
     thread_id: Optional[str] = None
+    decomposition_plan: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +123,7 @@ def agent_step(state: AgentState) -> dict:
     force_text = _is_loop_detected(messages)
 
     set_current_user_id(state.get("user_id", "default"))
-    llm = get_llm(AGENT_MODEL, temperature=0)
+    llm = get_llm(cfg.AGENT_MODEL, temperature=0)
 
     query_type = state.get("query_type", "structured")
     exposed_tools = get_tools_for_query_type(query_type)
@@ -130,6 +139,13 @@ def agent_step(state: AgentState) -> dict:
         inject = []
 
     sys_prompt = AGENT_SYSTEM_PROMPT
+
+    plan = state.get("decomposition_plan")
+    if plan and iteration == 0:
+        sys_prompt += (
+            "\n\nQUERY PLAN (follow this strategy):\n" + plan
+        )
+
     if query_type == "recommend" and iteration == 0:
         log.info("Recommendation mode: user=%s", state.get("user_id", "default"))
 
@@ -192,17 +208,129 @@ def decline_node(state: AgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def decompose_step(state: AgentState) -> dict:
+    """Pre-execution query planning for ambiguous/free-text queries.
+
+    Uses the cheap router model to decompose the user's natural-language
+    query into a step-by-step action plan before the ReAct loop starts.
+    The plan is stored in a separate state field and injected into the
+    system prompt by agent_step (avoids mid-conversation SystemMessage
+    which some APIs reject).
+    """
+    if not cfg.ENABLE_DECOMPOSITION:
+        return {}
+
+    query_type = state.get("query_type", "structured")
+    if query_type not in ("structured", "unstructured"):
+        return {}
+
+    messages = state["messages"]
+    user_query = ""
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            user_query = m.content
+            break
+
+    if not user_query or len(user_query.split()) <= 4:
+        return {}
+
+    prompt = DECOMPOSITION_PROMPT.format(
+        categories=", ".join(CATEGORIES),
+        intents=", ".join(INTENTS),
+        user_query=user_query,
+    )
+
+    try:
+        decomp_llm = get_llm(cfg.ROUTER_MODEL, temperature=0, max_tokens=200)
+        result = decomp_llm.invoke([HumanMessage(content=prompt)])
+        plan_text = result.content.strip()
+        if plan_text:
+            log.info("Query decomposition plan: %s", plan_text[:200])
+            return {"decomposition_plan": plan_text}
+    except Exception:
+        log.exception("Decomposition step failed, skipping")
+
+    return {}
+
+
 def route_after_router(state: AgentState) -> str:
     if state.get("query_type") == "out_of_scope":
         return "decline"
-    return "agent_step"
+    return "decompose"
+
+
+def reflect_step(state: AgentState) -> dict:
+    """Lightweight self-check: does the response look lazy?
+
+    Uses a small model to decide pass/retry. On "retry", injects a
+    nudge message so the agent re-enters the ReAct loop with a push
+    to try harder. Limited to one retry to avoid infinite loops.
+    """
+    if not cfg.ENABLE_REFLECTION:
+        return {}
+    if state.get("reflection_count", 0) >= 1:
+        return {}
+
+    messages = state["messages"]
+    last_msg = messages[-1]
+    if not isinstance(last_msg, AIMessage) or last_msg.tool_calls:
+        return {}
+
+    tool_names = [
+        m.tool_calls[0]["name"]
+        for m in messages
+        if isinstance(m, AIMessage) and m.tool_calls
+    ]
+    if not tool_names:
+        return {}
+
+    user_question = ""
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            user_question = m.content
+            break
+
+    prompt = REFLECTION_PROMPT.format(
+        question=user_question,
+        tool_names=", ".join(tool_names[-5:]),
+        response_preview=last_msg.content[:500],
+    )
+
+    try:
+        reflect_llm = get_llm(cfg.ROUTER_MODEL, temperature=0, max_tokens=10)
+        verdict = reflect_llm.invoke([HumanMessage(content=prompt)])
+        decision = verdict.content.strip().lower()
+        log.info("Reflection verdict: %s", decision)
+
+        if "retry" in decision:
+            nudge = HumanMessage(content=(
+                "Your last response may not have explored enough alternatives. "
+                "Please try different search terms, synonyms, or explore "
+                "related intents/categories before concluding."
+            ))
+            return {
+                "messages": [nudge],
+                "reflection_count": state.get("reflection_count", 0) + 1,
+            }
+    except Exception:
+        log.exception("Reflection step failed, skipping")
+
+    return {}
 
 
 def should_continue(state: AgentState) -> str:
-    """After agent_step: if tool_calls present -> execute tools; else -> done."""
+    """After agent_step: if tool_calls present -> execute tools; else -> reflect."""
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tool_step"
+    return "reflect"
+
+
+def after_reflect(state: AgentState) -> str:
+    """After reflection: if a nudge was injected, re-enter the agent loop."""
+    last_message = state["messages"][-1]
+    if isinstance(last_message, HumanMessage):
+        return "agent_step"
     return END
 
 
@@ -227,17 +355,24 @@ def build_graph(checkpointer=None):
     graph = StateGraph(AgentState)
 
     graph.add_node("router", router_node)
+    graph.add_node("decompose", decompose_step)
     graph.add_node("decline", decline_node)
     graph.add_node("agent_step", agent_step)
     graph.add_node("tool_step", tool_step)
+    graph.add_node("reflect", reflect_step)
 
     graph.add_edge(START, "router")
     graph.add_conditional_edges("router", route_after_router, {
-        "agent_step": "agent_step",
+        "decompose": "decompose",
         "decline": "decline",
     })
+    graph.add_edge("decompose", "agent_step")
     graph.add_conditional_edges("agent_step", should_continue, {
         "tool_step": "tool_step",
+        "reflect": "reflect",
+    })
+    graph.add_conditional_edges("reflect", after_reflect, {
+        "agent_step": "agent_step",
         END: END,
     })
     graph.add_edge("tool_step", "agent_step")

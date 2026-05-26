@@ -63,9 +63,11 @@ def main() -> None:
     print(f"Session: {session_id} | User: {user_id}")
     print("Type 'quit' or 'exit' to end. Type '--health' to run diagnostics.\n")
 
+    from src.config import RECURSION_LIMIT
+
     config = {
         "configurable": {"thread_id": session_id},
-        "recursion_limit": 12,
+        "recursion_limit": RECURSION_LIMIT,
     }
 
     while True:

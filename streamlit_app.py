@@ -320,9 +320,11 @@ with chat_tab:
     if query_to_process:
         thread_id = st.session_state.active_thread
         graph = st.session_state.graph
+        from src.config import RECURSION_LIMIT
+
         config = {
             "configurable": {"thread_id": thread_id},
-            "recursion_limit": 12,
+            "recursion_limit": RECURSION_LIMIT,
         }
 
         current_state = graph.get_state(config)

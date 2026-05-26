@@ -23,10 +23,19 @@ from src.session_store import SessionStore
 
 @pytest.fixture
 def client(tmp_path):
+    import src.config as cfg
+    import src.memory as mem_mod
+
     orig_conn = api_server._conn
     orig_checkpointer = api_server._checkpointer
     orig_graph = api_server._graph
     orig_store = api_server.store
+    orig_mem0_dir = cfg.MEM0_DATA_DIR
+
+    # Redirect Mem0 storage to temp dir so tests don't conflict with a running server
+    cfg.MEM0_DATA_DIR = tmp_path / "test_mem0_data"
+    cfg.MEM0_CONFIG["vector_store"]["config"]["path"] = str(cfg.MEM0_DATA_DIR)
+    mem_mod.reset_memory_instance()
 
     test_db = tmp_path / "test_checkpoints.db"
     test_conn = sqlite3.connect(str(test_db), check_same_thread=False)
@@ -46,6 +55,9 @@ def client(tmp_path):
         api_server._checkpointer = orig_checkpointer
         api_server._graph = orig_graph
         api_server.store = orig_store
+        cfg.MEM0_DATA_DIR = orig_mem0_dir
+        cfg.MEM0_CONFIG["vector_store"]["config"]["path"] = str(orig_mem0_dir)
+        mem_mod.reset_memory_instance()
         test_conn.close()
 
 
